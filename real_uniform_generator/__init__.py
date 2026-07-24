@@ -1,13 +1,3 @@
-bl_info = {
-    'name': 'Real Uniform Generator',
-    'author': 'tomicodev / OpenAI',
-    'version': (0, 2, 0),
-    'blender': (4, 3, 0),
-    'location': 'View3D > Sidebar > Uniform',
-    'description': 'Generate realistic configurable Japanese school pleated skirts',
-    'category': 'Add Mesh',
-}
-
 import bpy
 from bpy.props import PointerProperty
 
