@@ -57,7 +57,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Running source-tree generation and export smoke test..." -ForegroundColor Cyan
-& $BlenderExe --background --factory-startup --python $SourceTestScript
+& $BlenderExe --background --factory-startup --python-exit-code 1 --python $SourceTestScript
 if ($LASTEXITCODE -ne 0) {
     throw "Source-tree smoke test failed with exit code $LASTEXITCODE"
 }
@@ -88,7 +88,7 @@ try {
     }
 
     Write-Host "Running installed-extension end-to-end test..." -ForegroundColor Cyan
-    & $BlenderExe --background --python $InstalledTestScript
+    & $BlenderExe --background --python-exit-code 1 --python $InstalledTestScript
     if ($LASTEXITCODE -ne 0) {
         throw "Installed-extension smoke test failed with exit code $LASTEXITCODE"
     }
