@@ -20,7 +20,7 @@ jobs:
           python-version: '3.11'
 
       - name: Validate every Python module
-        run: python -m compileall -q real_uniform_generator
+        run: python -m compileall -q real_uniform_generator tests
 
       - name: Validate package structure
         run: |
@@ -65,6 +65,8 @@ jobs:
               raise SystemExit(f'Missing manifest keys: {sorted(missing)}')
           if data['id'] != 'real_uniform_generator':
               raise SystemExit('Unexpected extension id')
+          if data['version'] != '0.2.0':
+              raise SystemExit(f"Unexpected extension version: {data['version']}")
           print('Manifest OK:', data['id'], data['version'])
           PY
 
