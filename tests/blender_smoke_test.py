@@ -4,6 +4,7 @@ blender --background --factory-startup --python tests/blender_smoke_test.py
 """
 
 from pathlib import Path
+import os
 import sys
 import tempfile
 
@@ -21,6 +22,15 @@ from real_uniform_generator.constants import FABRIC_MATERIAL, GENERATED_COLLECTI
 def assert_true(condition, message):
     if not condition:
         raise AssertionError(message)
+
+
+def output_directory(prefix):
+    configured = os.environ.get('RUG_TEST_OUTPUT_DIR')
+    if configured:
+        path = Path(configured).expanduser().resolve() / prefix
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    return Path(tempfile.mkdtemp(prefix=f'{prefix}_'))
 
 
 def export_and_check(settings, output_dir, export_format):
@@ -73,7 +83,7 @@ def main():
         assert_true(len(packed_maps) == 3, f'Expected 3 packed maps, found {len(packed_maps)}')
         assert_true(all(image.packed_file for image in packed_maps), 'One or more PBR maps are not packed')
 
-        output_dir = Path(tempfile.mkdtemp(prefix='rug_smoke_'))
+        output_dir = output_directory('source')
         glb_path = export_and_check(settings, output_dir, 'GLB')
         fbx_path = export_and_check(settings, output_dir, 'FBX')
         obj_path = export_and_check(settings, output_dir, 'OBJ')
