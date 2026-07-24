@@ -39,7 +39,7 @@ def _replace_image(name, width, height, colorspace):
     image = bpy.data.images.new(name, width=width, height=height, alpha=True, float_buffer=False)
     try:
         image.colorspace_settings.name = colorspace
-    except TypeError:
+    except Exception:
         pass
     return image
 
@@ -49,6 +49,15 @@ def _set_pixels(image, array):
     image.pixels.foreach_set(flat)
     image.update()
     image.pack()
+
+
+def _linear_to_srgb(array, np):
+    clipped = np.clip(array, 0.0, 1.0)
+    return np.where(
+        clipped <= 0.0031308,
+        clipped * 12.92,
+        1.055 * np.power(clipped, 1.0 / 2.4) - 0.055,
+    )
 
 
 def generate_fabric_textures(settings):
@@ -81,9 +90,10 @@ def generate_fabric_textures(settings):
     dark = np.asarray(preset['dark'], dtype=np.float32)
     light = np.asarray(preset['light'], dtype=np.float32)
     color_factor = np.clip(0.34 + macro * 0.065 + weave * 0.022 + twill * 0.012, 0.0, 1.0)
-    rgb = dark[None, None, :] * (1.0 - color_factor[:, :, None]) + light[None, None, :] * color_factor[:, :, None]
+    rgb_linear = dark[None, None, :] * (1.0 - color_factor[:, :, None]) + light[None, None, :] * color_factor[:, :, None]
+    rgb_srgb = _linear_to_srgb(rgb_linear, np)
     alpha = np.ones((size, size, 1), dtype=np.float32)
-    base_rgba = np.concatenate((np.clip(rgb, 0.0, 1.0), alpha), axis=2)
+    base_rgba = np.concatenate((np.clip(rgb_srgb, 0.0, 1.0), alpha), axis=2)
 
     roughness = np.clip(
         preset['roughness'] + macro * 0.035 - weave * 0.018 + micro * 0.010,
