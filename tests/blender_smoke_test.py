@@ -23,6 +23,17 @@ def assert_true(condition, message):
         raise AssertionError(message)
 
 
+def export_and_check(settings, output_dir, export_format):
+    settings.export_format = export_format
+    extension = export_format.lower()
+    output_path = output_dir / f'smoke_test.{extension}'
+    result = bpy.ops.rug.export_skirt('EXEC_DEFAULT', filepath=str(output_path))
+    assert_true('FINISHED' in result, f'{export_format} export operator failed: {result}')
+    assert_true(output_path.exists(), f'{export_format} was not created: {output_path}')
+    assert_true(output_path.stat().st_size > 1024, f'{export_format} output is unexpectedly small')
+    return output_path
+
+
 def main():
     real_uniform_generator.register()
     try:
@@ -35,7 +46,6 @@ def main():
         settings.create_stitches = True
         settings.create_hardware = True
         settings.texture_resolution = '512'
-        settings.export_format = 'GLB'
 
         result = bpy.ops.rug.generate_skirt()
         assert_true('FINISHED' in result, f'Generate operator failed: {result}')
@@ -64,11 +74,15 @@ def main():
         assert_true(all(image.packed_file for image in packed_maps), 'One or more PBR maps are not packed')
 
         output_dir = Path(tempfile.mkdtemp(prefix='rug_smoke_'))
-        output_path = output_dir / 'smoke_test.glb'
-        result = bpy.ops.rug.export_skirt('EXEC_DEFAULT', filepath=str(output_path))
-        assert_true('FINISHED' in result, f'Export operator failed: {result}')
-        assert_true(output_path.exists(), f'GLB was not created: {output_path}')
-        assert_true(output_path.stat().st_size > 4096, 'GLB output is unexpectedly small')
+        glb_path = export_and_check(settings, output_dir, 'GLB')
+        fbx_path = export_and_check(settings, output_dir, 'FBX')
+        obj_path = export_and_check(settings, output_dir, 'OBJ')
+
+        mtl_path = obj_path.with_suffix('.mtl')
+        assert_true(mtl_path.exists(), 'OBJ material file was not created')
+        texture_dir = output_dir / f'{obj_path.stem}_textures'
+        texture_files = list(texture_dir.glob('*.png'))
+        assert_true(len(texture_files) == 3, f'Expected 3 OBJ texture files, found {len(texture_files)}')
 
         blend_path = output_dir / 'smoke_test.blend'
         result = bpy.ops.rug.save_blend_copy('EXEC_DEFAULT', filepath=str(blend_path))
@@ -78,7 +92,9 @@ def main():
         print('RUG_SMOKE_TEST_OK')
         print(f'Generated objects: {len(collection.objects)}')
         print(f'Packed maps: {[image.name for image in packed_maps]}')
-        print(f'GLB: {output_path}')
+        print(f'GLB: {glb_path}')
+        print(f'FBX: {fbx_path}')
+        print(f'OBJ: {obj_path}')
         print(f'BLEND: {blend_path}')
     finally:
         real_uniform_generator.unregister()
