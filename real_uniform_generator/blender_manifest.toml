@@ -1,0 +1,12 @@
+schema_version = "1.0.0"
+id = "real_uniform_generator"
+version = "0.1.0"
+name = "Real Uniform Generator"
+tagline = "Generate configurable Japanese school pleated skirts"
+maintainer = "tomicodev"
+type = "add-on"
+
+blender_version_min = "4.3.0"
+license = ["SPDX:MIT"]
+
+tags = ["Modeling", "Mesh", "Material"]
