@@ -1,4 +1,4 @@
-# Blender 5.2へのインストール
+# Blender 5.2へのインストールと確認
 
 ## 推奨: GitHub Actionsの配布ZIP
 
@@ -10,7 +10,41 @@
 6. ダウンロードしたZIPを指定します。
 7. 3Dビューで `N` キーを押し、`Uniform` タブを開きます。
 
-## リポジトリZIPから導入する場合
+## WindowsでZIP作成と実動確認を一括実行
+
+リポジトリ直下でPowerShellを開き、次を実行します。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\build_and_test.ps1
+```
+
+既定のBlenderパスは以下です。
+
+```text
+C:\Program Files\Blender Foundation\Blender 5.2\blender.exe
+```
+
+異なる場所にインストールしている場合は次のように指定します。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\build_and_test.ps1 `
+  -BlenderExe "D:\Apps\Blender\blender.exe"
+```
+
+成功すると、コンソールに `RUG_SMOKE_TEST_OK` が表示され、次のZIPが作成されます。
+
+```text
+dist\real_uniform_generator-v0.2.0.zip
+```
+
+スモークテストは以下を確認します。
+
+- 外布、ウエストベルト、裏地、縫製、金具の生成
+- 外布の頂点数とUV
+- Base Color、Roughness、Normal画像の生成とパック
+- GLB、FBX、OBJ、MTL、外部PNG、BLENDの作成
+
+## リポジトリZIPから手動導入する場合
 
 1. `Code > Download ZIP` でリポジトリをダウンロードして展開します。
 2. 展開した中の `real_uniform_generator` フォルダだけをZIP圧縮します。
@@ -19,6 +53,7 @@
    - `blender_manifest.toml`
    - `geometry.py`
    - `materials.py`
+   - `textures.py`
 4. Blenderの `Install from Disk` からZIPを指定します。
 
 ## 初回確認
@@ -29,12 +64,14 @@
 4. ビューポートをマテリアルプレビューまたはレンダー表示にします。
 5. 必要に応じて `プレビュー画像を書き出す` を押します。
 
+PBRテクスチャはスカート生成時にBlender内で作成され、画像としてBlendファイルへパックされます。1024 pxが標準です。高精細な確認では2048 px、動作確認を優先する場合は512 pxを選択してください。
+
 ## 保存・書き出し
 
 - `BLENDコピーを保存`: 現在開いている作業ファイルを変更せず、別名の `.blend` コピーを保存します。
-- GLB: マテリアルを含めた受け渡し向けです。
-- FBX: DCCやゲームエンジン向けです。
-- OBJ: 汎用メッシュ形式です。Blender固有のノード材質は完全には再現されません。
+- GLB: Base Color、Roughness、Normal画像を単一ファイルへ内包します。
+- FBX: 画像を外部保存したうえでテクスチャ埋め込みを試行します。
+- OBJ: `.obj`、`.mtl` と、`<ファイル名>_textures` フォルダ内のPNGを出力します。
 
 書き出し処理は生成物を一時複製してからモディファイアを適用するため、Blender内の元モデルは変更しません。
 
