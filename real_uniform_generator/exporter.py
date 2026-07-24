@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 import bpy
 
@@ -78,10 +79,45 @@ def _select_only(objects):
         bpy.context.view_layer.objects.active = objects[0]
 
 
+def _safe_filename(value):
+    cleaned = re.sub(r'[^A-Za-z0-9_.-]+', '_', value).strip('_')
+    return cleaned or 'texture'
+
+
+def _pbr_images():
+    return [
+        image for image in bpy.data.images
+        if image.get('rug_map_type') in {'base_color', 'roughness', 'normal'}
+    ]
+
+
+def _write_external_images(export_path):
+    texture_dir = export_path.parent / f'{export_path.stem}_textures'
+    texture_dir.mkdir(parents=True, exist_ok=True)
+    state = []
+
+    for image in _pbr_images():
+        old_path = image.filepath_raw
+        old_format = image.file_format
+        target = texture_dir / f'{_safe_filename(image.name)}.png'
+        image.filepath_raw = str(target)
+        image.file_format = 'PNG'
+        image.save()
+        state.append((image, old_path, old_format))
+    return state, texture_dir
+
+
+def _restore_image_paths(state):
+    for image, old_path, old_format in state:
+        image.filepath_raw = old_path
+        image.file_format = old_format
+
+
 def export_skirt(filepath, settings):
     path = Path(filepath).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
     collection = None
+    image_state = []
 
     try:
         collection, duplicates = _duplicate_for_export(settings)
@@ -101,6 +137,7 @@ def export_skirt(filepath, settings):
             )
         elif settings.export_format == 'FBX':
             path = path.with_suffix('.fbx')
+            image_state, _ = _write_external_images(path)
             bpy.ops.export_scene.fbx(
                 filepath=str(path),
                 use_selection=True,
@@ -108,10 +145,12 @@ def export_skirt(filepath, settings):
                 bake_space_transform=False,
                 add_leaf_bones=False,
                 mesh_smooth_type='FACE',
-                path_mode='AUTO',
+                path_mode='COPY',
+                embed_textures=True,
             )
         else:
             path = path.with_suffix('.obj')
+            image_state, _ = _write_external_images(path)
             if hasattr(bpy.ops.wm, 'obj_export'):
                 bpy.ops.wm.obj_export(
                     filepath=str(path),
@@ -125,9 +164,11 @@ def export_skirt(filepath, settings):
                     use_selection=True,
                     use_materials=True,
                     use_mesh_modifiers=True,
+                    path_mode='RELATIVE',
                 )
         return path
     finally:
+        _restore_image_paths(image_state)
         bpy.ops.object.select_all(action='DESELECT')
         if collection is not None:
             _remove_collection(EXPORT_COLLECTION)
