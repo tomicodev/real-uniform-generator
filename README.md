@@ -6,6 +6,7 @@ Blender 4.3以降（Blender 5.2を含む）向けの、日本の制服プリー�
 
 - 明示的な折り面で構成するナイフプリーツ
 - ウエスト側ではプリーツを縫い止め、裾に向かって開く形状
+- 折り線をシャープエッジとして保持し、面の途中だけを滑らかにする法線処理
 - ウエスト、奥行、丈、裾幅、プリーツ数、プリーツ深さの調整
 - 生地厚、ウエストベルト、ベルト重なり、裾芯
 - 裏地の自動生成と丈調整
@@ -29,14 +30,14 @@ Blender 4.3以降（Blender 5.2を含む）向けの、日本の制服プリー�
 1. GitHubの `Actions` を開きます。
 2. 最新の `Validate and Package Blender Add-on` を開きます。
 3. Artifactsから `real_uniform_generator-v0.2.0` をダウンロードします。
-4. Blenderで `Edit > Preferences > Add-ons > Install from Disk` を選択します。
+4. BlenderのPreferencesから `Install from Disk` を選択します。
 5. ダウンロードしたZIPを指定します。
 
-### リポジトリZIPから作る方法
+### リポジトリZIPから手動で作る方法
 
 1. リポジトリを `Code > Download ZIP` でダウンロードして展開します。
-2. `real_uniform_generator` フォルダだけをZIP圧縮します。
-3. ZIP直下に `__init__.py` と `blender_manifest.toml` があることを確認します。
+2. `real_uniform_generator` フォルダを開き、その**中身**をZIP圧縮します。
+3. ZIP直下に `__init__.py`、`blender_manifest.toml`、`LICENSE.txt` があることを確認します。
 4. Blenderの `Install from Disk` からインストールします。
 
 ## 使用方法
@@ -62,14 +63,34 @@ powershell -ExecutionPolicy Bypass -File .\tools\build_and_test.ps1
 C:\Program Files\Blender Foundation\Blender 5.2\blender.exe
 ```
 
-この処理は、インストール用ZIPの作成後、Blenderをバックグラウンド起動して以下を検査します。
+この処理は以下を順に実行します。
 
-- スカート、ウエストベルト、裏地の生成
-- 頂点数、UV、マテリアル
+1. Blender公式のExtension Buildコマンドで配布ZIPを作成
+2. Blender公式のExtension ValidateコマンドでZIPを検証
+3. ソースツリーを直接読み込む生成・書き出しテスト
+4. 隔離したBlenderユーザー環境へZIPを実際にインストールして有効化
+5. インストール済みアドオンから生成、プレビュー、全形式書き出しを実行
+
+検査対象は以下です。
+
+- スカート、ウエストベルト、裏地、縫製、ファスナー、ホックの生成
+- 頂点数、UV、マテリアル、プリーツのシャープエッジ
 - Base Color、Roughness、Normal画像の生成とパック
-- GLB、FBX、OBJ、MTL、PNGテクスチャ、BLENDの作成
+- プレビューPNG
+- GLB、FBX、OBJ、MTL、外部PNG、BLEND
 
-成功時はコンソールに `RUG_SMOKE_TEST_OK` と表示され、`dist/real_uniform_generator-v0.2.0.zip` が作成されます。
+成功時はコンソールに次の2行が表示されます。
+
+```text
+RUG_SMOKE_TEST_OK
+RUG_INSTALLED_EXTENSION_TEST_OK
+```
+
+配布ZIPは次に作成されます。
+
+```text
+dist\real_uniform_generator-v0.2.0.zip
+```
 
 ## ファイル構成
 
@@ -79,6 +100,7 @@ real_uniform_generator/
 ├── constants.py
 ├── properties.py
 ├── geometry.py
+├── finishing.py
 ├── materials.py
 ├── textures.py
 ├── exporter.py
@@ -89,7 +111,8 @@ real_uniform_generator/
 └── blender_manifest.toml
 
 tests/
-└── blender_smoke_test.py
+├── blender_smoke_test.py
+└── installed_extension_smoke_test.py
 
 tools/
 └── build_and_test.ps1
@@ -97,4 +120,4 @@ tools/
 
 ## 検証範囲
 
-GitHub ActionsではPython構文、パッケージ構成、Blender Extensionマニフェスト、配布ZIP生成を検証します。Blender本体による形状・材質・全形式書き出しは、`tools/build_and_test.ps1` から実行するスモークテストで確認します。
+GitHub ActionsではPython構文、パッケージ構成、Blender Extensionマニフェスト、ZIP直下の構造、配布ZIP生成を検証します。Blender本体による形状・材質・プレビュー・全形式書き出し・実インストールは、`tools/build_and_test.ps1` から実行する2段階のスモークテストで確認します。
