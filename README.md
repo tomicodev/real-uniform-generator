@@ -25,13 +25,15 @@ Blender 4.3以降（Blender 5.2を含む）向けの、日本の制服プリー�
 
 ## インストール
 
-### GitHub Actionsの配布ZIPを使う方法
+### GitHub Actionsの公式ビルドZIPを使う方法
 
 1. GitHubの `Actions` を開きます。
-2. 最新の `Validate and Package Blender Add-on` を開きます。
+2. 最新の `Validate Package and Test Blender Add-on` を開きます。
 3. Artifactsから `real_uniform_generator-v0.2.0` をダウンロードします。
 4. BlenderのPreferencesから `Install from Disk` を選択します。
 5. ダウンロードしたZIPを指定します。
+
+同じ実行の `blender-runtime-outputs` には、Blender 5.2で実際に生成したプレビューPNG、BLEND、GLB、FBX、OBJ、MTL、PBR画像が入ります。`real_uniform_generator-v0.2.0-fallback` は静的検証のみで作成する予備ZIPです。
 
 ### リポジトリZIPから手動で作る方法
 
@@ -51,7 +53,7 @@ Blender 4.3以降（Blender 5.2を含む）向けの、日本の制服プリー�
 
 ## Windowsで一括確認する
 
-リポジトリ直下で次を実行します。
+`BUILD_AND_TEST.bat` をダブルクリックするか、リポジトリ直下で次を実行します。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\build_and_test.ps1
@@ -116,8 +118,10 @@ tests/
 
 tools/
 └── build_and_test.ps1
+
+BUILD_AND_TEST.bat
 ```
 
 ## 検証範囲
 
-GitHub ActionsではPython構文、パッケージ構成、Blender Extensionマニフェスト、ZIP直下の構造、配布ZIP生成を検証します。Blender本体による形状・材質・プレビュー・全形式書き出し・実インストールは、`tools/build_and_test.ps1` から実行する2段階のスモークテストで確認します。
+GitHub ActionsはPython構文、パッケージ構成、Blender Extensionマニフェスト、ZIP構造を検査した後、公式Linux版Blender 5.2 Stableを起動します。Blender公式CLIでZIPをビルド・検証し、隔離環境へ実際にインストールして、形状・PBR材質・プレビュー・BLEND・GLB・FBX・OBJの生成まで検査します。Windowsでは `BUILD_AND_TEST.bat` から同等の検証を実行できます。
