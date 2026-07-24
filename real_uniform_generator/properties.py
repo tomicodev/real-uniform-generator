@@ -144,6 +144,16 @@ class RUG_Settings(PropertyGroup):
         max=0.35,
         subtype='FACTOR',
     )
+    texture_resolution: EnumProperty(
+        name="PBRテクスチャ解像度",
+        description="GLBにも埋め込みやすい生地テクスチャの解像度",
+        items=(
+            ('512', "512 px", "軽量・高速"),
+            ('1024', "1024 px", "標準"),
+            ('2048', "2048 px", "高精細・生成に時間がかかります"),
+        ),
+        default='1024',
+    )
     export_format: EnumProperty(
         name="形式",
         items=(
