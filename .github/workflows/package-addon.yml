@@ -1,4 +1,4 @@
-name: Validate and Package Blender Add-on
+name: Validate Package and Test Blender Add-on
 
 on:
   push:
@@ -65,7 +65,7 @@ jobs:
           print('Package and manifest OK:', data['id'], data['version'])
           PY
 
-      - name: Create installable extension ZIP
+      - name: Create portable fallback ZIP
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -94,10 +94,92 @@ jobs:
           print('Created:', output)
           PY
 
-      - name: Upload add-on artifact
+      - name: Upload fallback add-on ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: real_uniform_generator-v0.2.0
+          name: real_uniform_generator-v0.2.0-fallback
           path: dist/real_uniform_generator-v0.2.0.zip
           if-no-files-found: error
           retention-days: 30
+
+  blender-runtime-test:
+    needs: validate-and-package
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BLENDER_URL: https://cdn.builder.blender.org/download/daily/blender-5.2.0-stable%2Bv52.fbe6228777e7-linux.x86_64-release.tar.xz
+      BLENDER_USER_RESOURCES: ${{ github.workspace }}/.blender-user
+      RUG_TEST_OUTPUT_DIR: ${{ github.workspace }}/runtime-output
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates curl xz-utils xvfb \
+            libgl1 libegl1 libx11-6 libxext6 libxi6 libxrender1 \
+            libxfixes3 libxxf86vm1 libxkbcommon0 libsm6
+
+      - name: Download Blender 5.2 Stable
+        run: |
+          curl --fail --location --retry 3 "$BLENDER_URL" --output blender.tar.xz
+          mkdir blender-runtime
+          tar -xf blender.tar.xz --strip-components=1 -C blender-runtime
+          chmod +x blender-runtime/blender
+          blender-runtime/blender --version
+
+      - name: Build and validate with Blender extension CLI
+        run: |
+          mkdir -p blender-dist
+          blender-runtime/blender --command extension build \
+            --source-dir real_uniform_generator \
+            --output-filepath blender-dist/real_uniform_generator-v0.2.0.zip
+          blender-runtime/blender --command extension validate \
+            blender-dist/real_uniform_generator-v0.2.0.zip
+
+      - name: Run source-tree Blender smoke test
+        run: |
+          mkdir -p "$RUG_TEST_OUTPUT_DIR"
+          xvfb-run -a blender-runtime/blender \
+            --background --factory-startup \
+            --python tests/blender_smoke_test.py
+
+      - name: Install packaged extension in isolated Blender profile
+        run: |
+          rm -rf "$BLENDER_USER_RESOURCES" .blender-extension-repo
+          mkdir -p "$BLENDER_USER_RESOURCES" .blender-extension-repo
+          blender-runtime/blender --command extension repo-add \
+            --name "RUG Test" \
+            --directory "$GITHUB_WORKSPACE/.blender-extension-repo" \
+            --source USER \
+            --clear-all \
+            rug_test
+          blender-runtime/blender --command extension install-file \
+            -r rug_test -e \
+            blender-dist/real_uniform_generator-v0.2.0.zip
+
+      - name: Run installed-extension Blender test
+        run: |
+          xvfb-run -a blender-runtime/blender \
+            --background \
+            --python tests/installed_extension_smoke_test.py
+
+      - name: Upload officially built extension ZIP
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real_uniform_generator-v0.2.0
+          path: blender-dist/real_uniform_generator-v0.2.0.zip
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload Blender runtime outputs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blender-runtime-outputs
+          path: runtime-output
+          if-no-files-found: warn
+          retention-days: 14
