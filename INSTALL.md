@@ -1,28 +1,49 @@
 # Blender 5.2へのインストール
 
-## 方法1: リポジトリZIPから導入
+## 推奨: GitHub Actionsの配布ZIP
 
-1. GitHubの `Code > Download ZIP` でリポジトリをダウンロードします。
-2. ZIPを展開します。
-3. 展開先にある `real_uniform_generator` フォルダだけを、もう一度ZIP圧縮します。
-   - ZIP直下に `__init__.py` と `blender_manifest.toml` が入る状態にします。
+1. リポジトリの `Actions` を開きます。
+2. 最新の `Validate and Package Blender Add-on` を選択します。
+3. 画面下部のArtifactsから `real_uniform_generator-v0.2.0` をダウンロードします。
 4. Blender 5.2で `Edit > Preferences > Add-ons` を開きます。
-5. 右上メニューから `Install from Disk` を選び、手順3のZIPを指定します。
-6. 3Dビューで `N` キーを押し、`Uniform` タブを開きます。
+5. 右上メニューから `Install from Disk` を選択します。
+6. ダウンロードしたZIPを指定します。
+7. 3Dビューで `N` キーを押し、`Uniform` タブを開きます。
 
-## 使用方法
+## リポジトリZIPから導入する場合
 
-1. 寸法、プリーツ数、生地を設定します。
-2. `制服スカートを生成` を押します。
-3. 書き出し形式を選択します。
-4. `生成物を書き出す` を押します。
+1. `Code > Download ZIP` でリポジトリをダウンロードして展開します。
+2. 展開した中の `real_uniform_generator` フォルダだけをZIP圧縮します。
+3. ZIPを開いた直下に以下があることを確認します。
+   - `__init__.py`
+   - `blender_manifest.toml`
+   - `geometry.py`
+   - `materials.py`
+4. Blenderの `Install from Disk` からZIPを指定します。
 
-## 書き出し形式
+## 初回確認
 
-- GLB: マテリアルを含めて受け渡しやすい形式
-- FBX: DCC・ゲームエンジン向け
-- OBJ: 汎用メッシュ形式
+1. `Uniform` タブで既定値のまま `制服スカートを生成` を押します。
+2. Outlinerに `RUG_UniformSkirt` コレクションが生成されることを確認します。
+3. `確認用スタジオを作成` を押します。
+4. ビューポートをマテリアルプレビューまたはレンダー表示にします。
+5. 必要に応じて `プレビュー画像を書き出す` を押します。
 
-## 注意
+## 保存・書き出し
 
-現段階は v0.1 です。プリーツは明示的な折り面で生成し、布厚、ウエストベルト、ステッチ、ファスナー、織り目ノーマルを含みます。次の段階で、UV改善、クロス変形、裏地、プリーツ縫い止まりを追加します。
+- `BLENDコピーを保存`: 現在開いている作業ファイルを変更せず、別名の `.blend` コピーを保存します。
+- GLB: マテリアルを含めた受け渡し向けです。
+- FBX: DCCやゲームエンジン向けです。
+- OBJ: 汎用メッシュ形式です。Blender固有のノード材質は完全には再現されません。
+
+書き出し処理は生成物を一時複製してからモディファイアを適用するため、Blender内の元モデルは変更しません。
+
+## アンインストール
+
+1. Blenderで `Edit > Preferences > Add-ons` を開きます。
+2. `Real Uniform Generator` を検索します。
+3. メニューから削除します。
+
+## エラーが出た場合
+
+Blenderの `Window > Toggle System Console` またはScripting画面のConsoleで、`Python: Traceback` から末尾までをコピーしてください。エラー行だけでなくTraceback全文が必要です。
