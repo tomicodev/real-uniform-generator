@@ -1,0 +1,57 @@
+name: Apply v0.3.0 Source Bundle
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/v03_bundle.part*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-real-uniform-generator-v03
+  cancel-in-progress: false
+
+jobs:
+  apply-source-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reassemble and extract source bundle
+        run: |
+          cat tools/v03_bundle.part* | base64 --decode > /tmp/rug-v03.zip
+          unzip -o /tmp/rug-v03.zip -d .
+          rm -f tools/v03_bundle.part*
+          rm -rf real_uniform_generator/__pycache__ tests/__pycache__
+
+      - name: Validate generated source
+        run: |
+          python -m compileall -q real_uniform_generator tests
+          python - <<'PY'
+          import tomllib
+          from pathlib import Path
+          with Path('real_uniform_generator/blender_manifest.toml').open('rb') as file:
+              manifest = tomllib.load(file)
+          assert manifest['version'] == '0.3.0', manifest
+          assert Path('real_uniform_generator/standards.py').exists()
+          assert Path('docs/REALISM_SPEC.md').exists()
+          print('v0.3.0 source bundle validated')
+          PY
+
+      - name: Commit generated source to main
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No generated changes to commit.'
+            exit 0
+          fi
+          git commit -m 'Apply research-backed uniform skirt generator v0.3.0'
+          git push origin HEAD:main
