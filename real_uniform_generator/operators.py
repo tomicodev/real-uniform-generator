@@ -6,6 +6,7 @@ from bpy.props import StringProperty
 from bpy.types import Operator
 
 from .exporter import export_skirt
+from .finishing import finish_generated_geometry
 from .geometry import clear_generated, generate_uniform_skirt, generated_objects
 from .materials import build_materials
 from .preview import clear_preview, create_preview_scene
@@ -22,6 +23,7 @@ class RUG_OT_generate(Operator):
         try:
             materials = build_materials(settings)
             created = generate_uniform_skirt(settings, materials)
+            finish_generated_geometry(created)
             bpy.ops.object.select_all(action='DESELECT')
             root = created['root']
             root.select_set(True)
