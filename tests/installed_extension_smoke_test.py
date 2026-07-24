@@ -1,6 +1,7 @@
 """Executed after installing and enabling the extension in an isolated repo."""
 
 from pathlib import Path
+import os
 import tempfile
 
 import bpy
@@ -13,6 +14,15 @@ FABRIC_MATERIAL = 'RUG_UniformFabric'
 def assert_true(condition, message):
     if not condition:
         raise AssertionError(message)
+
+
+def output_directory(prefix):
+    configured = os.environ.get('RUG_TEST_OUTPUT_DIR')
+    if configured:
+        path = Path(configured).expanduser().resolve() / prefix
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    return Path(tempfile.mkdtemp(prefix=f'{prefix}_'))
 
 
 def export_and_check(settings, output_dir, export_format):
@@ -84,7 +94,7 @@ def main():
     assert_true(len(maps) == 3, f'Expected 3 packed PBR maps, found {len(maps)}')
     assert_true(all(image.packed_file for image in maps), 'PBR images are not packed')
 
-    output_dir = Path(tempfile.mkdtemp(prefix='rug_installed_'))
+    output_dir = output_directory('installed')
 
     preview_path = output_dir / 'installed_preview.png'
     result = bpy.ops.rug.render_preview('EXEC_DEFAULT', filepath=str(preview_path))
