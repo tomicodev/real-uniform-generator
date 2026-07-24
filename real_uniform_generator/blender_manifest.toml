@@ -1,8 +1,8 @@
 schema_version = "1.0.0"
 id = "real_uniform_generator"
-version = "0.1.0"
+version = "0.2.0"
 name = "Real Uniform Generator"
-tagline = "Generate configurable Japanese school pleated skirts"
+tagline = "Generate realistic configurable Japanese school pleated skirts"
 maintainer = "tomicodev"
 type = "add-on"
 
