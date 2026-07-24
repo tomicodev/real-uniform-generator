@@ -34,6 +34,7 @@ jobs:
               'constants.py',
               'properties.py',
               'geometry.py',
+              'finishing.py',
               'materials.py',
               'textures.py',
               'exporter.py',
