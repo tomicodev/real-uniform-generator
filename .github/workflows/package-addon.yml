@@ -22,9 +22,10 @@ jobs:
       - name: Validate every Python module
         run: python -m compileall -q real_uniform_generator tests
 
-      - name: Validate package structure
+      - name: Validate package structure and manifest
         run: |
           python - <<'PY'
+          import tomllib
           from pathlib import Path
 
           package = Path('real_uniform_generator')
@@ -39,44 +40,58 @@ jobs:
               'preview.py',
               'operators.py',
               'ui.py',
+              'LICENSE.txt',
               'blender_manifest.toml',
           }
           present = {path.name for path in package.iterdir() if path.is_file()}
           missing = required - present
           if missing:
               raise SystemExit(f'Missing package files: {sorted(missing)}')
-          print('Package structure OK')
-          PY
 
-      - name: Validate extension manifest
-        run: |
-          python - <<'PY'
-          import tomllib
-          from pathlib import Path
-
-          path = Path('real_uniform_generator/blender_manifest.toml')
-          with path.open('rb') as file:
+          with (package / 'blender_manifest.toml').open('rb') as file:
               data = tomllib.load(file)
-          required = {
+          manifest_required = {
               'schema_version', 'id', 'version', 'name', 'tagline',
               'maintainer', 'type', 'blender_version_min', 'license'
           }
-          missing = required - data.keys()
+          missing = manifest_required - data.keys()
           if missing:
               raise SystemExit(f'Missing manifest keys: {sorted(missing)}')
           if data['id'] != 'real_uniform_generator':
               raise SystemExit('Unexpected extension id')
           if data['version'] != '0.2.0':
               raise SystemExit(f"Unexpected extension version: {data['version']}")
-          print('Manifest OK:', data['id'], data['version'])
+          print('Package and manifest OK:', data['id'], data['version'])
           PY
 
-      - name: Create installable ZIP
+      - name: Create installable extension ZIP
         run: |
-          rm -rf dist
-          mkdir -p dist
-          zip -r dist/real_uniform_generator-v0.2.0.zip real_uniform_generator \
-            -x '*/__pycache__/*' '*.pyc' '*.pyo'
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZIP_DEFLATED, ZipFile
+
+          source = Path('real_uniform_generator')
+          output = Path('dist/real_uniform_generator-v0.2.0.zip')
+          output.parent.mkdir(parents=True, exist_ok=True)
+          excluded_suffixes = {'.pyc', '.pyo', '.zip'}
+
+          with ZipFile(output, 'w', ZIP_DEFLATED) as archive:
+              for path in sorted(source.rglob('*')):
+                  if not path.is_file():
+                      continue
+                  relative = path.relative_to(source)
+                  if '__pycache__' in relative.parts or path.suffix in excluded_suffixes:
+                      continue
+                  archive.write(path, relative.as_posix())
+
+          with ZipFile(output) as archive:
+              names = set(archive.namelist())
+              required_root = {'__init__.py', 'blender_manifest.toml', 'LICENSE.txt'}
+              missing = required_root - names
+              if missing:
+                  raise SystemExit(f'Archive root is invalid: missing {sorted(missing)}')
+          print('Created:', output)
+          PY
 
       - name: Upload add-on artifact
         uses: actions/upload-artifact@v4
