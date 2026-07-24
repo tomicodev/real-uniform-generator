@@ -34,6 +34,7 @@ jobs:
               'properties.py',
               'geometry.py',
               'materials.py',
+              'textures.py',
               'exporter.py',
               'preview.py',
               'operators.py',
