@@ -8,5 +8,16 @@ type = "add-on"
 
 blender_version_min = "4.3.0"
 license = ["SPDX:MIT"]
-
 tags = ["Modeling", "Mesh", "Material"]
+
+[permissions]
+files = "Export skirt models previews and generated texture images"
+
+[build]
+paths_exclude_pattern = [
+    "__pycache__/",
+    "*.pyc",
+    "*.pyo",
+    ".*",
+    "*.zip",
+]
