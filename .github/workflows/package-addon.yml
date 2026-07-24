@@ -1,0 +1,51 @@
+name: Package Blender Add-on
+
+on:
+  push:
+    branches: [main, feature/addon-v0.1]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  validate-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate Python syntax
+        run: python -m py_compile real_uniform_generator/__init__.py
+
+      - name: Validate extension manifest
+        run: |
+          python - <<'PY'
+          import tomllib
+          from pathlib import Path
+          path = Path('real_uniform_generator/blender_manifest.toml')
+          with path.open('rb') as f:
+              data = tomllib.load(f)
+          required = {'schema_version', 'id', 'version', 'name', 'tagline', 'maintainer', 'type', 'blender_version_min', 'license'}
+          missing = required - data.keys()
+          if missing:
+              raise SystemExit(f'Missing manifest keys: {sorted(missing)}')
+          print('Manifest OK:', data['id'], data['version'])
+          PY
+
+      - name: Create installable ZIP
+        run: |
+          mkdir -p dist
+          zip -r dist/real_uniform_generator.zip real_uniform_generator \
+            -x '*/__pycache__/*' '*.pyc'
+
+      - name: Upload add-on artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: real_uniform_generator
+          path: dist/real_uniform_generator.zip
+          if-no-files-found: error
