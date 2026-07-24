@@ -1,17 +1,19 @@
 # Blender 5.2へのインストールと確認
 
-## 推奨: GitHub Actionsの配布ZIP
+## 推奨: GitHub Actionsの公式ビルドZIP
 
 1. リポジトリの `Actions` を開きます。
-2. 最新の `Validate and Package Blender Add-on` を選択します。
+2. 最新の `Validate Package and Test Blender Add-on` を選択します。
 3. 画面下部のArtifactsから `real_uniform_generator-v0.2.0` をダウンロードします。
 4. Blender 5.2のPreferencesから `Install from Disk` を選択します。
 5. ダウンロードしたZIPを指定します。
 6. 3Dビューで `N` キーを押し、`Uniform` タブを開きます。
 
+`real_uniform_generator-v0.2.0` は、Blender 5.2自身のExtension BuildとValidateを通して作成するZIPです。同じ実行の `blender-runtime-outputs` には、Blender 5.2で実際に生成したプレビューPNG、BLEND、GLB、FBX、OBJ、MTL、PBR画像が入ります。
+
 ## WindowsでZIP作成と実動確認を一括実行
 
-リポジトリ直下でPowerShellを開き、次を実行します。
+最も簡単な方法は、リポジトリ直下の `BUILD_AND_TEST.bat` をダブルクリックすることです。PowerShellから実行する場合は次を使用します。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\build_and_test.ps1
@@ -39,6 +41,8 @@ powershell -ExecutionPolicy Bypass -File .\tools\build_and_test.ps1 `
 5. 配布ZIPを実際にインストールして有効化
 6. インストール済みアドオンから生成、プレビュー、全形式書き出しを実行
 7. 一時環境を削除
+
+Pythonの未処理例外が起きた場合は `--python-exit-code 1` により必ず失敗終了します。
 
 成功すると、コンソールに以下が表示されます。
 
