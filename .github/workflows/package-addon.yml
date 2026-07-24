@@ -1,8 +1,8 @@
-name: Package Blender Add-on
+name: Validate and Package Blender Add-on
 
 on:
   push:
-    branches: [main, feature/addon-v0.1]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -19,33 +19,66 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Validate Python syntax
-        run: python -m py_compile real_uniform_generator/__init__.py
+      - name: Validate every Python module
+        run: python -m compileall -q real_uniform_generator
+
+      - name: Validate package structure
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          package = Path('real_uniform_generator')
+          required = {
+              '__init__.py',
+              'constants.py',
+              'properties.py',
+              'geometry.py',
+              'materials.py',
+              'exporter.py',
+              'preview.py',
+              'operators.py',
+              'ui.py',
+              'blender_manifest.toml',
+          }
+          present = {path.name for path in package.iterdir() if path.is_file()}
+          missing = required - present
+          if missing:
+              raise SystemExit(f'Missing package files: {sorted(missing)}')
+          print('Package structure OK')
+          PY
 
       - name: Validate extension manifest
         run: |
           python - <<'PY'
           import tomllib
           from pathlib import Path
+
           path = Path('real_uniform_generator/blender_manifest.toml')
-          with path.open('rb') as f:
-              data = tomllib.load(f)
-          required = {'schema_version', 'id', 'version', 'name', 'tagline', 'maintainer', 'type', 'blender_version_min', 'license'}
+          with path.open('rb') as file:
+              data = tomllib.load(file)
+          required = {
+              'schema_version', 'id', 'version', 'name', 'tagline',
+              'maintainer', 'type', 'blender_version_min', 'license'
+          }
           missing = required - data.keys()
           if missing:
               raise SystemExit(f'Missing manifest keys: {sorted(missing)}')
+          if data['id'] != 'real_uniform_generator':
+              raise SystemExit('Unexpected extension id')
           print('Manifest OK:', data['id'], data['version'])
           PY
 
       - name: Create installable ZIP
         run: |
+          rm -rf dist
           mkdir -p dist
-          zip -r dist/real_uniform_generator.zip real_uniform_generator \
-            -x '*/__pycache__/*' '*.pyc'
+          zip -r dist/real_uniform_generator-v0.2.0.zip real_uniform_generator \
+            -x '*/__pycache__/*' '*.pyc' '*.pyo'
 
       - name: Upload add-on artifact
         uses: actions/upload-artifact@v4
         with:
-          name: real_uniform_generator
-          path: dist/real_uniform_generator.zip
+          name: real_uniform_generator-v0.2.0
+          path: dist/real_uniform_generator-v0.2.0.zip
           if-no-files-found: error
+          retention-days: 30
