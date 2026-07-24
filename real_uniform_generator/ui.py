@@ -41,10 +41,12 @@ class RUG_PT_main(Panel):
         box.prop(settings, 'create_hardware')
 
         box = layout.box()
-        box.label(text='生地', icon='MATERIAL')
+        box.label(text='生地・PBR', icon='MATERIAL')
         box.prop(settings, 'fabric')
         box.prop(settings, 'weave_scale')
         box.prop(settings, 'weave_strength')
+        box.prop(settings, 'texture_resolution')
+        box.label(text='生成時にBase/Roughness/Normalを作成', icon='INFO')
 
         row = layout.row(align=True)
         row.scale_y = 1.4
