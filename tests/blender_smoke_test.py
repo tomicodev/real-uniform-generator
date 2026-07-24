@@ -15,7 +15,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import real_uniform_generator
-from real_uniform_generator.constants import GENERATED_COLLECTION
+from real_uniform_generator.constants import FABRIC_MATERIAL, GENERATED_COLLECTION
 
 
 def assert_true(condition, message):
@@ -34,6 +34,7 @@ def main():
         settings.create_lining = True
         settings.create_stitches = True
         settings.create_hardware = True
+        settings.texture_resolution = '512'
         settings.export_format = 'GLB'
 
         result = bpy.ops.rug.generate_skirt()
@@ -52,12 +53,22 @@ def main():
         assert_true(bool(skirt.data.uv_layers), 'Outer skirt UV map is missing')
         assert_true(bool(skirt.data.materials), 'Outer skirt material is missing')
 
+        fabric = bpy.data.materials.get(FABRIC_MATERIAL)
+        assert_true(fabric is not None, 'Fabric material is missing')
+        assert_true(bool(fabric.get('rug_exportable_textures')), 'Packed PBR material was not created')
+        packed_maps = [
+            image for image in bpy.data.images
+            if image.get('rug_map_type') in {'base_color', 'roughness', 'normal'}
+        ]
+        assert_true(len(packed_maps) == 3, f'Expected 3 packed maps, found {len(packed_maps)}')
+        assert_true(all(image.packed_file for image in packed_maps), 'One or more PBR maps are not packed')
+
         output_dir = Path(tempfile.mkdtemp(prefix='rug_smoke_'))
         output_path = output_dir / 'smoke_test.glb'
         result = bpy.ops.rug.export_skirt('EXEC_DEFAULT', filepath=str(output_path))
         assert_true('FINISHED' in result, f'Export operator failed: {result}')
         assert_true(output_path.exists(), f'GLB was not created: {output_path}')
-        assert_true(output_path.stat().st_size > 1024, 'GLB output is unexpectedly small')
+        assert_true(output_path.stat().st_size > 4096, 'GLB output is unexpectedly small')
 
         blend_path = output_dir / 'smoke_test.blend'
         result = bpy.ops.rug.save_blend_copy('EXEC_DEFAULT', filepath=str(blend_path))
@@ -66,6 +77,7 @@ def main():
 
         print('RUG_SMOKE_TEST_OK')
         print(f'Generated objects: {len(collection.objects)}')
+        print(f'Packed maps: {[image.name for image in packed_maps]}')
         print(f'GLB: {output_path}')
         print(f'BLEND: {blend_path}')
     finally:
