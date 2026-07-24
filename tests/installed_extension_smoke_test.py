@@ -68,6 +68,11 @@ def main():
     assert_true(skirt is not None and skirt.type == 'MESH', 'Outer skirt is missing')
     assert_true(len(skirt.data.vertices) > 1000, 'Outer skirt is unexpectedly simple')
     assert_true(bool(skirt.data.uv_layers), 'Outer skirt UV is missing')
+    sharp_edges = sum(1 for edge in skirt.data.edges if edge.use_edge_sharp)
+    assert_true(
+        sharp_edges >= settings.pleat_count,
+        f'Pleat creases were not preserved: {sharp_edges} sharp edges',
+    )
 
     fabric = bpy.data.materials.get(FABRIC_MATERIAL)
     assert_true(fabric is not None, 'Fabric material is missing')
@@ -80,6 +85,13 @@ def main():
     assert_true(all(image.packed_file for image in maps), 'PBR images are not packed')
 
     output_dir = Path(tempfile.mkdtemp(prefix='rug_installed_'))
+
+    preview_path = output_dir / 'installed_preview.png'
+    result = bpy.ops.rug.render_preview('EXEC_DEFAULT', filepath=str(preview_path))
+    assert_true('FINISHED' in result, f'Preview render failed: {result}')
+    assert_true(preview_path.exists(), 'Preview image was not created')
+    assert_true(preview_path.stat().st_size > 4096, 'Preview image is unexpectedly small')
+
     glb_path = export_and_check(settings, output_dir, 'GLB')
     fbx_path = export_and_check(settings, output_dir, 'FBX')
     obj_path = export_and_check(settings, output_dir, 'OBJ')
@@ -95,6 +107,8 @@ def main():
 
     print('RUG_INSTALLED_EXTENSION_TEST_OK')
     print(f'Generated objects: {len(collection.objects)}')
+    print(f'Sharp edges: {sharp_edges}')
+    print(f'Preview: {preview_path}')
     print(f'GLB: {glb_path}')
     print(f'FBX: {fbx_path}')
     print(f'OBJ: {obj_path}')
