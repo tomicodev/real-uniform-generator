@@ -40,6 +40,26 @@ def _simple_material(name, color, roughness):
     return material
 
 
+def _set_compatible_render_engine(scene):
+    """Select the available Eevee identifier across Blender 4.x and 5.x."""
+    engine_property = scene.render.bl_rna.properties.get('engine')
+    available = (
+        {item.identifier for item in engine_property.enum_items}
+        if engine_property is not None
+        else set()
+    )
+
+    for candidate in ('BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT', 'BLENDER_WORKBENCH'):
+        if candidate in available:
+            scene.render.engine = candidate
+            return candidate
+
+    raise RuntimeError(
+        '利用可能なレンダーエンジンが見つかりません: '
+        + ', '.join(sorted(available))
+    )
+
+
 def create_preview_scene(settings):
     clear_preview()
     collection = _ensure_collection()
@@ -99,7 +119,7 @@ def create_preview_scene(settings):
         background.inputs['Strength'].default_value = 0.34
 
     scene = bpy.context.scene
-    scene.render.engine = 'BLENDER_EEVEE_NEXT'
+    _set_compatible_render_engine(scene)
     scene.render.resolution_x = 1080
     scene.render.resolution_y = 1350
     scene.render.resolution_percentage = 70
