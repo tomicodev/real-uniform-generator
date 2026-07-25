@@ -5,12 +5,12 @@ normal CPython as part of GitHub Actions. Blender runtime tests cover bpy.
 """
 
 from dataclasses import dataclass
+import base64
+import io
 import math
 from pathlib import Path
 import sys
 import types
-import base64
-import io
 from zipfile import ZipFile
 
 
@@ -42,11 +42,29 @@ mathutils = types.ModuleType('mathutils')
 mathutils.Vector = Vector
 sys.modules['mathutils'] = mathutils
 
+
+def decode_runtime_payload(path: Path) -> bytes:
+    """Decode the embedded ZIP after removing harmless whitespace/BOM.
+
+    GitHub and archive tools may preserve a trailing newline or wrap the long
+    Base64 line. Strict decoding is still retained after normalisation so real
+    corruption is detected.
+    """
+    encoded = ''.join(path.read_text(encoding='utf-8-sig').split())
+    if not encoded:
+        raise RuntimeError(f'Runtime payload is empty: {path}')
+    encoded += '=' * (-len(encoded) % 4)
+    return base64.b64decode(encoded, validate=True)
+
+
 ROOT = Path(__file__).resolve().parents[1]
 payload_path = ROOT / 'real_uniform_generator' / 'v05_runtime_payload.b64'
-payload = base64.b64decode(payload_path.read_text(encoding='ascii'), validate=True)
+payload = decode_runtime_payload(payload_path)
 with ZipFile(io.BytesIO(payload)) as archive:
-    source = archive.read('pattern.py').decode('utf-8')
+    bad_member = archive.testzip()
+    if bad_member is not None:
+        raise RuntimeError(f'Runtime ZIP member is corrupt: {bad_member}')
+    source = archive.read('pattern.py').decode('utf-8-sig')
 
 pattern = types.ModuleType('rug_pattern_test_module')
 pattern.__file__ = f'{payload_path}!/pattern.py'
