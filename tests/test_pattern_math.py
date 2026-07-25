@@ -6,12 +6,14 @@ normal CPython as part of GitHub Actions. Blender runtime tests cover bpy.
 
 from dataclasses import dataclass
 import base64
+import binascii
 import io
 import math
 from pathlib import Path
+import re
 import sys
 import types
-from zipfile import ZipFile
+from zipfile import BadZipFile, ZipFile
 
 
 class Vector:
@@ -42,29 +44,68 @@ mathutils = types.ModuleType('mathutils')
 mathutils.Vector = Vector
 sys.modules['mathutils'] = mathutils
 
+_BASE64_FRAGMENT = re.compile(r'[A-Za-z0-9+/=]+')
+_BASE64_INVALID = re.compile(r'[^A-Za-z0-9+/=]+')
 
-def decode_runtime_payload(path: Path) -> bytes:
-    """Decode the embedded ZIP after removing harmless whitespace/BOM.
 
-    GitHub and archive tools may preserve a trailing newline or wrap the long
-    Base64 line. Strict decoding is still retained after normalisation so real
-    corruption is detected.
-    """
-    encoded = ''.join(path.read_text(encoding='utf-8-sig').split())
-    if not encoded:
+def _pad_base64(value: str) -> str:
+    return value + '=' * (-len(value) % 4)
+
+
+def encoded_candidates(path: Path):
+    raw = path.read_text(encoding='utf-8-sig')
+    compact = ''.join(raw.split())
+    if not compact:
         raise RuntimeError(f'Runtime payload is empty: {path}')
-    encoded += '=' * (-len(encoded) % 4)
-    return base64.b64decode(encoded, validate=True)
+
+    seen = set()
+    values = [
+        ('normalised', compact),
+        ('urlsafe-normalised', compact.translate(str.maketrans('-_', '+/'))),
+        ('non-base64-filtered', _BASE64_INVALID.sub('', compact)),
+        (
+            'long-fragments',
+            ''.join(
+                fragment
+                for fragment in _BASE64_FRAGMENT.findall(compact)
+                if len(fragment) >= 24
+            ),
+        ),
+    ]
+    for label, value in values:
+        value = _pad_base64(value)
+        if value and value not in seen:
+            seen.add(value)
+            yield label, value
+
+
+def read_pattern_source(path: Path) -> str:
+    errors = []
+    for label, encoded in encoded_candidates(path):
+        try:
+            payload = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            errors.append(f'{label}: Base64: {exc}')
+            continue
+
+        try:
+            with ZipFile(io.BytesIO(payload)) as archive:
+                bad_member = archive.testzip()
+                if bad_member is not None:
+                    raise RuntimeError(f'corrupt member: {bad_member}')
+                source = archive.read('pattern.py').decode('utf-8-sig')
+                compile(source, f'{path}!/pattern.py', 'exec')
+                print(f'Runtime payload recovery mode: {label}')
+                return source
+        except (BadZipFile, KeyError, UnicodeDecodeError, RuntimeError, SyntaxError) as exc:
+            errors.append(f'{label}: ZIP: {type(exc).__name__}: {exc}')
+
+    raise RuntimeError('Runtime payload recovery failed: ' + ' | '.join(errors))
 
 
 ROOT = Path(__file__).resolve().parents[1]
 payload_path = ROOT / 'real_uniform_generator' / 'v05_runtime_payload.b64'
-payload = decode_runtime_payload(payload_path)
-with ZipFile(io.BytesIO(payload)) as archive:
-    bad_member = archive.testzip()
-    if bad_member is not None:
-        raise RuntimeError(f'Runtime ZIP member is corrupt: {bad_member}')
-    source = archive.read('pattern.py').decode('utf-8-sig')
+source = read_pattern_source(payload_path)
 
 pattern = types.ModuleType('rug_pattern_test_module')
 pattern.__file__ = f'{payload_path}!/pattern.py'
