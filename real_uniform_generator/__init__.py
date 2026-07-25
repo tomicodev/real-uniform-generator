@@ -8,7 +8,7 @@ from . import operators, properties, ui
 
 bl_info = {
     "name": "Real Uniform Generator",
-    "author": "tomicodev / OpenAI",
+    "author": "tomicodev",
     "version": (0, 6, 0),
     "blender": (5, 2, 0),
     "location": "View3D > Sidebar > 制服",
