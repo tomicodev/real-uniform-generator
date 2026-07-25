@@ -1,64 +1,82 @@
 # Real Uniform Generator
 
-Blender 4.3以降（Blender 5.2 LTSを含む）向けの、日本の制服プリーツスカート生成アドオンです。
+Blender 5.2向けの、日本の冬制服用プリーツスカート生成アドオンです。
 
-## v0.5.0 — Pattern & Material Foundation
+## v0.6.0 — Normal Modules & Verified Generator
 
-前版の「楕円筒へ周期的な凹凸を付ける方式」を廃止し、縫製される一枚布の経路を追う型紙ベースのエンジンへ置き換えました。
+Base64 runtime payloadを廃止し、通常の複数Pythonモジュール構成へ移行しました。3Dビューの **制服** タブで `制服スカートを生成` を押すと、既定の実寸・縫製仕様からスカートを再生成できます。
 
-- 完成ウエスト周長・完成ヒップ周長・丈・ヒップラインを実寸入力
-- 表プリーツ、折り山、奥プリーツ、折り返しを連続した一枚布として生成
-- ウエスト側の縫い止まり、解放区間、自由落下区間を分離
-- 外側へ露出する裾リングを廃止し、各プリーツに追従する内側見返しを生成
-- 左脇／右脇／後ろ中心の実際の開き線とコンシールファスナー構造
-- 左右の縫い代、ファスナーテープ、細いナイロンコイル、小型スライダー、ホック
-- 通常表示では内部構造を隠し、確認時だけ表示可能
-- まつり縫い／外側ミシン縫いの選択
-- 物理スケールUV
-- 内蔵PBR、またはAdobe Substance 3D Sampler・Envato等から書き出した外部PBRセットの自動読込
-- Base Color / Roughness / NormalGL / NormalDX / Height / AOの自動判定
-- GLB / FBX / OBJの非破壊書き出し、BLENDコピー保存
-- 円形ステージを使わないニュートラルな確認用スタジオ
+### 生成構造
+
+- 完成ウエスト68cm、完成ヒップ92cm、丈48cm、ヒップライン18cm
+- 20本ナイフプリーツ、奥プリーツ2.8cm
+- ウエストから10.5cmを縫い止め、その下5.5cmで段階的に解放
+- 表面、折山、奥プリーツ、次の表面を一枚の連続布として生成
+- 裾4cmは外布そのものを内側へ折り返し、独立した裾リングを作らない
+- 表地厚1.25mm
+- 表ベルト、上端折り、内側見返し、接着芯を持つ3.5cm幅ウエストベルト
+- 左脇コンシールファスナー、内側の縫い代・テープ・コイル・小型スライダー
+- 裏地付き
+- 実寸スケールUV
+
+### マテリアル
+
+- 内蔵の濃紺ウール調マテリアル
+- 外部PBRフォルダの自動認識
+- Base Color / Roughness / Normal OpenGL / Normal DirectX / Height / AO
+- DirectX NormalのY反転
+- Metallic 0、Coat 0、弱いSheen
+- Normal・Height・AO強度を調整可能
+- テクスチャ実幅と織り目サイズをcm単位で設定可能
+- Eevee / Cycles対応
+
+### 出力
+
+- GLB / FBX / OBJ
+- 元ファイルを上書きしないBLENDコピー保存
+- 正面確認用レンダー
+- 内部検証用の正面・側面・背面・内側・ファスナービューは `preview.py` から生成可能
 
 ## インストール
 
-GitHub Actionsの最新Artifact、またはローカルで作成した `real_uniform_generator-v0.5.0.zip` を、BlenderのPreferencesから `Install from Disk` で選択します。
+GitHub Actionsの最新Artifact、またはローカルで作成した `real_uniform_generator-v0.6.0.zip` を、BlenderのPreferencesから `Install from Disk` で選択します。
 
-インストール後、3Dビューで `N` キーを押し、右側の **「制服」** タブを開きます。
+インストール後、3Dビューで `N` キーを押し、右側の **制服** タブを開きます。
 
-## 最初の推奨設定
+## 既定仕様
 
 ```text
-ウエスト仕上がり  68 cm
-ヒップ仕上がり    92 cm
+ウエスト仕上がり    68 cm
+ヒップ仕上がり      92 cm
 スカート丈          48 cm
 ヒップライン        18 cm
-プリーツ数          20
+ナイフプリーツ数    20
 奥プリーツ深さ      2.8 cm
-縫い止まり          10.5 cm
-解放区間            5.5 cm
+縫い止め長さ        10.5 cm
+プリーツ解放長さ    5.5 cm
 表地厚              1.25 mm
 裾折り返し          4 cm
-裾の縫い方          まつり縫い
+ベルト幅            3.5 cm
 ファスナー          左脇・18 cm
+裏地丈              37 cm
 ```
 
-## Adobe CC / Envatoを使う場合
+## 外部PBRのファイル名例
 
-最も高い品質は、実物の生地見本を撮影し、Adobe Substance 3D Samplerの「画像からマテリアル」でPBR化する方法です。Envatoの素材もローカルの参考・レンダリング用として読み込めます。
+```text
+uniform_wool_basecolor.png
+uniform_wool_roughness.png
+uniform_wool_normal_opengl.png
+uniform_wool_normal_directx.png
+uniform_wool_height.png
+uniform_wool_ao.png
+```
 
-詳しい手順は以下をご覧ください。
-
-- [`docs/ADOBE_ENVATO_WORKFLOW.md`](docs/ADOBE_ENVATO_WORKFLOW.md)
-- [`docs/FABRIC_CAPTURE_GUIDE.md`](docs/FABRIC_CAPTURE_GUIDE.md)
-- [`docs/REALISM_SPEC.md`](docs/REALISM_SPEC.md)
-
-> **Envato素材について**  
-> Envatoの元画像やPBRマップを、この公開リポジトリや配布アドオンへ同梱しないでください。プロジェクト単位でライセンス登録し、契約条件に従ってローカル利用してください。第三者へ抽出可能な素材として再配布する用途には使いません。
+外部素材のライセンス条件に従い、抽出可能な元画像を公開リポジトリや配布ZIPへ同梱しないでください。
 
 ## Windowsで一括ビルド・検査
 
-リポジトリ直下の `BUILD_AND_TEST.bat` をダブルクリックするか、PowerShellで次を実行します。
+リポジトリ直下の `BUILD_AND_TEST.bat` を実行するか、PowerShellで次を実行します。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\build_and_test.ps1
@@ -70,7 +88,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\build_and_test.ps1
 C:\Program Files\Blender Foundation\Blender 5.2\blender.exe
 ```
 
-成功すると以下が表示されます。
+合格時の表示:
 
 ```text
 RUG_PATTERN_TEST_OK
@@ -81,16 +99,9 @@ RUG_INSTALLED_EXTENSION_TEST_OK
 配布ZIP:
 
 ```text
-dist\real_uniform_generator-v0.5.0.zip
+dist\real_uniform_generator-v0.6.0.zip
 ```
 
-## 現段階の位置づけ
+## 品質調整
 
-v0.5.0は、フォトリアル化のための**構造とマテリアル入出力の基盤**です。実物と見分けにくい最終品質には、次の入力が必要です。
-
-1. 再現対象となる一着の実寸
-2. 実物生地の接写、または適切にライセンスされたPBR素材
-3. 正面・側面・背面・内側の比較写真
-4. 必要に応じたCloth緩和と人物へのフィッティング
-
-数式だけで「制服風」にするのではなく、特定の一着をデジタルツインとして合わせ込む方針です。
+v0.6.0は、標準仕様を安定して再生成する構造実装です。特定の制服をデジタルツインとして合わせ込む場合は、実物の採寸、正面・側面・背面・内側写真、実物生地のPBR、対象ボディへのフィッティングを追加してください。

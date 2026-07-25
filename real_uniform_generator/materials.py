@@ -1,185 +1,184 @@
+from __future__ import annotations
+
 import bpy
-
-from .constants import FABRIC_MATERIAL, LINING_MATERIAL, METAL_MATERIAL, THREAD_MATERIAL
-from .textures import generate_fabric_textures
+from .material_io import load_external_pbr
 
 
-def _set_input(node, name, value):
+def _set(node, name, value):
     socket = node.inputs.get(name)
     if socket is not None:
         socket.default_value = value
 
 
-def _new_material(name):
-    material = bpy.data.materials.get(name) or bpy.data.materials.new(name)
-    material.use_nodes = True
-    material.node_tree.nodes.clear()
-    return material
+def _material(name):
+    mat = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+    mat.use_nodes = True
+    mat.node_tree.nodes.clear()
+    return mat
 
 
-def _fabric_preset(settings):
-    presets = {
-        'WINTER_NAVY': {'roughness': 0.82, 'sheen': 0.28, 'fallback': (0.010, 0.018, 0.042, 1.0)},
-        'SUMMER_NAVY': {'roughness': 0.70, 'sheen': 0.18, 'fallback': (0.014, 0.028, 0.066, 1.0)},
-        'CHARCOAL': {'roughness': 0.79, 'sheen': 0.24, 'fallback': (0.022, 0.026, 0.034, 1.0)},
-        'BLACK': {'roughness': 0.76, 'sheen': 0.20, 'fallback': (0.006, 0.007, 0.010, 1.0)},
-    }
-    return presets[settings.fabric]
+def _principled(nodes):
+    node = nodes.new('ShaderNodeBsdfPrincipled')
+    _set(node, 'Metallic', 0.0)
+    _set(node, 'Roughness', 0.78)
+    _set(node, 'IOR', 1.46)
+    _set(node, 'Coat Weight', 0.0)
+    _set(node, 'Clearcoat', 0.0)
+    _set(node, 'Sheen Weight', 0.08)
+    _set(node, 'Sheen Roughness', 0.72)
+    return node
 
 
-def _create_fallback_fabric_nodes(material, settings, preset):
-    nodes = material.node_tree.nodes
-    links = material.node_tree.links
+def _image_node(nodes, image, label, location):
+    node = nodes.new('ShaderNodeTexImage')
+    node.image = image
+    node.label = label
+    node.location = location
+    node.interpolation = 'Linear'
+    node.extension = 'REPEAT'
+    return node
+
+
+def _normal_color(nodes, links, texture, directx):
+    if not directx:
+        return texture.outputs['Color']
+    separate = nodes.new('ShaderNodeSeparateColor')
+    separate.mode = 'RGB'
+    invert = nodes.new('ShaderNodeMath')
+    invert.operation = 'SUBTRACT'
+    invert.inputs[0].default_value = 1.0
+    combine = nodes.new('ShaderNodeCombineColor')
+    combine.mode = 'RGB'
+    links.new(texture.outputs['Color'], separate.inputs['Color'])
+    links.new(separate.outputs['Red'], combine.inputs['Red'])
+    links.new(separate.outputs['Green'], invert.inputs[1])
+    links.new(invert.outputs[0], combine.inputs['Green'])
+    links.new(separate.outputs['Blue'], combine.inputs['Blue'])
+    return combine.outputs['Color']
+
+
+def _external_fabric(mat, settings, maps):
+    nodes, links = mat.node_tree.nodes, mat.node_tree.links
     output = nodes.new('ShaderNodeOutputMaterial')
-    principled = nodes.new('ShaderNodeBsdfPrincipled')
-    texcoord = nodes.new('ShaderNodeTexCoord')
-    wave = nodes.new('ShaderNodeTexWave')
-    noise = nodes.new('ShaderNodeTexNoise')
+    output.location = (760, 40)
+    bsdf = _principled(nodes)
+    bsdf.location = (490, 40)
+    uv = nodes.new('ShaderNodeUVMap')
+    uv.uv_map = 'UVMap'
+    uv.location = (-850, 40)
+    base = _image_node(nodes, maps['base_color'], 'Base Color', (-600, 260))
+    links.new(uv.outputs['UV'], base.inputs['Vector'])
+    base_output = base.outputs['Color']
+    if 'ao' in maps:
+        ao = _image_node(nodes, maps['ao'], 'Ambient Occlusion', (-600, 90))
+        mix = nodes.new('ShaderNodeMixRGB')
+        mix.blend_type = 'MULTIPLY'
+        mix.inputs[0].default_value = settings.ao_strength
+        links.new(uv.outputs['UV'], ao.inputs['Vector'])
+        links.new(base_output, mix.inputs[1])
+        links.new(ao.outputs['Color'], mix.inputs[2])
+        base_output = mix.outputs['Color']
+    links.new(base_output, bsdf.inputs['Base Color'])
+    if 'roughness' in maps:
+        rough = _image_node(nodes, maps['roughness'], 'Roughness', (-600, -80))
+        links.new(uv.outputs['UV'], rough.inputs['Vector'])
+        links.new(rough.outputs['Color'], bsdf.inputs['Roughness'])
+    normal_output = None
+    if 'normal' in maps:
+        normal_tex = _image_node(nodes, maps['normal'], 'Normal', (-600, -260))
+        links.new(uv.outputs['UV'], normal_tex.inputs['Vector'])
+        normal_map = nodes.new('ShaderNodeNormalMap')
+        normal_map.space = 'TANGENT'
+        normal_map.uv_map = 'UVMap'
+        _set(normal_map, 'Strength', settings.normal_strength)
+        links.new(_normal_color(nodes, links, normal_tex, maps.get('_normal_directx', False)), normal_map.inputs['Color'])
+        normal_output = normal_map.outputs['Normal']
+    if 'height' in maps:
+        height = _image_node(nodes, maps['height'], 'Height', (-600, -440))
+        bump = nodes.new('ShaderNodeBump')
+        _set(bump, 'Strength', settings.height_strength)
+        _set(bump, 'Distance', 0.00045)
+        links.new(uv.outputs['UV'], height.inputs['Vector'])
+        links.new(height.outputs['Color'], bump.inputs['Height'])
+        if normal_output is not None:
+            links.new(normal_output, bump.inputs['Normal'])
+        normal_output = bump.outputs['Normal']
+    if normal_output is not None:
+        links.new(normal_output, bsdf.inputs['Normal'])
+    links.new(bsdf.outputs['BSDF'], output.inputs['Surface'])
+    mat['rug_external_pbr'] = True
+    mat['rug_normal_directx'] = bool(maps.get('_normal_directx'))
+    return mat
+
+
+def _procedural_fabric(mat, settings):
+    nodes, links = mat.node_tree.nodes, mat.node_tree.links
+    output = nodes.new('ShaderNodeOutputMaterial')
+    bsdf = _principled(nodes)
+    _set(bsdf, 'Base Color', (0.0035, 0.0075, 0.0240, 1.0))
+    _set(bsdf, 'Roughness', 0.80)
+    uv = nodes.new('ShaderNodeUVMap')
+    uv.uv_map = 'UVMap'
+    mapping = nodes.new('ShaderNodeMapping')
+    scale = settings.texture_tile_cm / max(settings.weave_size_cm, 0.01)
+    mapping.inputs['Scale'].default_value = (scale, scale, 1.0)
+    wave_x = nodes.new('ShaderNodeTexWave')
+    wave_x.wave_type = 'BANDS'
+    wave_x.bands_direction = 'X'
+    _set(wave_x, 'Scale', 1.0)
+    _set(wave_x, 'Distortion', 0.35)
+    wave_y = nodes.new('ShaderNodeTexWave')
+    wave_y.wave_type = 'BANDS'
+    wave_y.bands_direction = 'Y'
+    _set(wave_y, 'Scale', 1.0)
+    _set(wave_y, 'Distortion', 0.35)
+    weave = nodes.new('ShaderNodeMixRGB')
+    weave.blend_type = 'MULTIPLY'
+    weave.inputs[0].default_value = 1.0
     bump = nodes.new('ShaderNodeBump')
-
-    _set_input(principled, 'Base Color', preset['fallback'])
-    _set_input(principled, 'Roughness', preset['roughness'])
-    _set_input(principled, 'IOR', 1.46)
-    _set_input(principled, 'Sheen Weight', preset['sheen'])
-    _set_input(principled, 'Sheen Roughness', 0.66)
-    wave.wave_type = 'BANDS'
-    wave.bands_direction = 'X'
-    _set_input(wave, 'Scale', settings.weave_scale)
-    _set_input(wave, 'Distortion', 2.0)
-    _set_input(noise, 'Scale', settings.weave_scale * 0.65)
-    _set_input(noise, 'Detail', 2.0)
-    _set_input(bump, 'Strength', settings.weave_strength)
-    _set_input(bump, 'Distance', 0.0010)
-
-    links.new(texcoord.outputs['Generated'], wave.inputs['Vector'])
-    links.new(texcoord.outputs['Generated'], noise.inputs['Vector'])
-    links.new(wave.outputs['Color'], bump.inputs['Height'])
-    links.new(bump.outputs['Normal'], principled.inputs['Normal'])
-    links.new(principled.outputs['BSDF'], output.inputs['Surface'])
-    material['rug_exportable_textures'] = False
-    return material
+    _set(bump, 'Strength', min(0.22, settings.normal_strength * 0.42))
+    _set(bump, 'Distance', 0.00025)
+    links.new(uv.outputs['UV'], mapping.inputs['Vector'])
+    links.new(mapping.outputs['Vector'], wave_x.inputs['Vector'])
+    links.new(mapping.outputs['Vector'], wave_y.inputs['Vector'])
+    links.new(wave_x.outputs['Color'], weave.inputs[1])
+    links.new(wave_y.outputs['Color'], weave.inputs[2])
+    links.new(weave.outputs['Color'], bump.inputs['Height'])
+    links.new(bump.outputs['Normal'], bsdf.inputs['Normal'])
+    links.new(bsdf.outputs['BSDF'], output.inputs['Surface'])
+    mat['rug_external_pbr'] = False
+    mat['rug_normal_directx'] = False
+    return mat
 
 
 def create_fabric_material(settings):
-    preset = _fabric_preset(settings)
-    material = _new_material(FABRIC_MATERIAL)
-    nodes = material.node_tree.nodes
-    links = material.node_tree.links
+    mat = _material('RUG_Fabric')
+    if settings.use_external_pbr and settings.texture_directory:
+        maps, files = load_external_pbr(settings)
+        mat['rug_pbr_files'] = ';'.join(f'{key}:{path.name}' for key, path in files.items())
+        return _external_fabric(mat, settings, maps)
+    return _procedural_fabric(mat, settings)
 
-    try:
-        maps = generate_fabric_textures(settings)
-    except Exception as exc:
-        print(f'Real Uniform Generator: PBR texture generation failed, using fallback nodes: {exc}')
-        return _create_fallback_fabric_nodes(material, settings, preset)
 
+def _simple(name, base, roughness, metallic=0.0, sheen=0.0):
+    mat = _material(name)
+    nodes, links = mat.node_tree.nodes, mat.node_tree.links
     output = nodes.new('ShaderNodeOutputMaterial')
-    output.location = (680, 40)
-    principled = nodes.new('ShaderNodeBsdfPrincipled')
-    principled.location = (390, 40)
-    _set_input(principled, 'Roughness', preset['roughness'])
-    _set_input(principled, 'IOR', 1.46)
-    _set_input(principled, 'Sheen Weight', preset['sheen'])
-    _set_input(principled, 'Sheen Roughness', 0.66)
-
-    uv = nodes.new('ShaderNodeUVMap')
-    uv.location = (-720, 20)
-    uv.uv_map = 'UVMap'
-
-    base = nodes.new('ShaderNodeTexImage')
-    base.location = (-480, 230)
-    base.label = 'Packed Base Color'
-    base.image = maps['base_color']
-    base.interpolation = 'Linear'
-    base.extension = 'REPEAT'
-
-    roughness = nodes.new('ShaderNodeTexImage')
-    roughness.location = (-480, 20)
-    roughness.label = 'Packed Roughness'
-    roughness.image = maps['roughness']
-    roughness.interpolation = 'Linear'
-    roughness.extension = 'REPEAT'
-
-    normal_texture = nodes.new('ShaderNodeTexImage')
-    normal_texture.location = (-480, -210)
-    normal_texture.label = 'Packed Normal'
-    normal_texture.image = maps['normal']
-    normal_texture.interpolation = 'Linear'
-    normal_texture.extension = 'REPEAT'
-
-    normal_map = nodes.new('ShaderNodeNormalMap')
-    normal_map.location = (80, -170)
-    normal_map.space = 'TANGENT'
-    normal_map.uv_map = 'UVMap'
-    _set_input(normal_map, 'Strength', 0.72 + settings.weave_strength * 1.8)
-
-    links.new(uv.outputs['UV'], base.inputs['Vector'])
-    links.new(uv.outputs['UV'], roughness.inputs['Vector'])
-    links.new(uv.outputs['UV'], normal_texture.inputs['Vector'])
-    links.new(base.outputs['Color'], principled.inputs['Base Color'])
-    links.new(roughness.outputs['Color'], principled.inputs['Roughness'])
-    links.new(normal_texture.outputs['Color'], normal_map.inputs['Color'])
-    links.new(normal_map.outputs['Normal'], principled.inputs['Normal'])
-    links.new(principled.outputs['BSDF'], output.inputs['Surface'])
-
-    material['rug_exportable_textures'] = True
-    material['rug_texture_resolution'] = int(settings.texture_resolution)
-    return material
-
-
-def create_lining_material():
-    material = _new_material(LINING_MATERIAL)
-    nodes = material.node_tree.nodes
-    links = material.node_tree.links
-    output = nodes.new('ShaderNodeOutputMaterial')
-    principled = nodes.new('ShaderNodeBsdfPrincipled')
-    noise = nodes.new('ShaderNodeTexNoise')
-    bump = nodes.new('ShaderNodeBump')
-    texcoord = nodes.new('ShaderNodeTexCoord')
-
-    _set_input(principled, 'Base Color', (0.018, 0.024, 0.040, 1.0))
-    _set_input(principled, 'Roughness', 0.42)
-    _set_input(principled, 'Sheen Weight', 0.32)
-    _set_input(noise, 'Scale', 180.0)
-    _set_input(noise, 'Detail', 1.0)
-    _set_input(bump, 'Strength', 0.035)
-    _set_input(bump, 'Distance', 0.0005)
-
-    links.new(texcoord.outputs['Generated'], noise.inputs['Vector'])
-    links.new(noise.outputs['Fac'], bump.inputs['Height'])
-    links.new(bump.outputs['Normal'], principled.inputs['Normal'])
-    links.new(principled.outputs['BSDF'], output.inputs['Surface'])
-    return material
-
-
-def create_thread_material():
-    material = _new_material(THREAD_MATERIAL)
-    nodes = material.node_tree.nodes
-    links = material.node_tree.links
-    output = nodes.new('ShaderNodeOutputMaterial')
-    principled = nodes.new('ShaderNodeBsdfPrincipled')
-    _set_input(principled, 'Base Color', (0.035, 0.045, 0.072, 1.0))
-    _set_input(principled, 'Roughness', 0.92)
-    links.new(principled.outputs['BSDF'], output.inputs['Surface'])
-    return material
-
-
-def create_metal_material():
-    material = _new_material(METAL_MATERIAL)
-    nodes = material.node_tree.nodes
-    links = material.node_tree.links
-    output = nodes.new('ShaderNodeOutputMaterial')
-    principled = nodes.new('ShaderNodeBsdfPrincipled')
-    _set_input(principled, 'Base Color', (0.18, 0.20, 0.23, 1.0))
-    _set_input(principled, 'Metallic', 0.82)
-    _set_input(principled, 'Roughness', 0.28)
-    links.new(principled.outputs['BSDF'], output.inputs['Surface'])
-    return material
+    bsdf = _principled(nodes)
+    _set(bsdf, 'Base Color', base)
+    _set(bsdf, 'Roughness', roughness)
+    _set(bsdf, 'Metallic', metallic)
+    _set(bsdf, 'Sheen Weight', sheen)
+    links.new(bsdf.outputs['BSDF'], output.inputs['Surface'])
+    return mat
 
 
 def build_materials(settings):
     return {
         'fabric': create_fabric_material(settings),
-        'lining': create_lining_material(),
-        'thread': create_thread_material(),
-        'metal': create_metal_material(),
+        'lining': _simple('RUG_LiningMaterial', (0.030, 0.040, 0.075, 1.0), 0.46, 0.0, 0.12),
+        'thread': _simple('RUG_ThreadMaterial', (0.018, 0.028, 0.060, 1.0), 0.94),
+        'metal': _simple('RUG_MetalMaterial', (0.15, 0.17, 0.20, 1.0), 0.30, 0.82),
+        'zipper': _simple('RUG_ZipperMaterial', (0.020, 0.026, 0.050, 1.0), 0.72, 0.0, 0.03),
+        'interfacing': _simple('RUG_InterfacingMaterial', (0.12, 0.13, 0.14, 1.0), 0.96),
     }

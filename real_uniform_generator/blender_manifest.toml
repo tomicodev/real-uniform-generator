@@ -1,23 +1,16 @@
 schema_version = "1.0.0"
 id = "real_uniform_generator"
-version = "0.5.0"
+version = "0.6.0"
 name = "Real Uniform Generator"
-tagline = "Pattern-based realistic Japanese school pleated skirts"
+tagline = "Construction-based Japanese uniform pleated skirts"
 maintainer = "tomicodev"
 type = "add-on"
-
-blender_version_min = "4.3.0"
+blender_version_min = "5.2.0"
 license = ["SPDX:MIT"]
 tags = ["Modeling", "Mesh", "Material"]
 
 [permissions]
-files = "Load external PBR textile maps and export skirt models previews and textures"
+files = "Load selected PBR textile maps and export generated skirt files"
 
 [build]
-paths_exclude_pattern = [
-    "__pycache__/",
-    "*.pyc",
-    "*.pyo",
-    ".*",
-    "*.zip",
-]
+paths_exclude_pattern = ["__pycache__/", "*.pyc", ".git/", "test_outputs/"]

@@ -9,7 +9,7 @@ $PatternTest = Join-Path $RepoRoot "tests\test_pattern_math.py"
 $SourceTest = Join-Path $RepoRoot "tests\blender_smoke_test.py"
 $InstalledTest = Join-Path $RepoRoot "tests\installed_extension_smoke_test.py"
 $DistDir = Join-Path $RepoRoot "dist"
-$ZipPath = Join-Path $DistDir "real_uniform_generator-v0.5.0.zip"
+$ZipPath = Join-Path $DistDir "real_uniform_generator-v0.6.0.zip"
 
 foreach ($Path in @($AddonDir, $PatternTest, $SourceTest, $InstalledTest)) {
     if (-not (Test-Path $Path)) {
@@ -70,7 +70,7 @@ try {
     }
 
     $PreviousUserResources = $env:BLENDER_USER_RESOURCES
-    $TestUserResources = Join-Path ([System.IO.Path]::GetTempPath()) ("rug_v05_user_" + [Guid]::NewGuid().ToString("N"))
+    $TestUserResources = Join-Path ([System.IO.Path]::GetTempPath()) ("rug_v06_user_" + [Guid]::NewGuid().ToString("N"))
     $TestRepositoryDirectory = Join-Path $TestUserResources "extension_repository"
     New-Item -ItemType Directory -Path $TestRepositoryDirectory -Force | Out-Null
 

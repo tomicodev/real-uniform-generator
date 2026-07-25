@@ -1,4 +1,5 @@
-import bpy
+from __future__ import annotations
+
 from bpy.types import Panel
 
 
@@ -7,68 +8,51 @@ class RUG_PT_main(Panel):
     bl_idname = 'RUG_PT_main'
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'Uniform'
+    bl_category = '制服'
 
     def draw(self, context):
         layout = self.layout
-        settings = context.scene.rug_settings
-
+        s = context.scene.rug_settings
         box = layout.box()
-        box.label(text='シルエット', icon='MESH_DATA')
-        box.prop(settings, 'pleat_count')
-        box.prop(settings, 'skirt_length')
+        box.label(text='標準寸法')
+        for prop in ('waist_circumference', 'hip_circumference', 'skirt_length', 'hip_line', 'hem_ease'):
+            box.prop(s, prop)
+        box = layout.box()
+        box.label(text='プリーツ・縫製')
+        for prop in ('pleat_count', 'pleat_depth', 'pleat_stitch_length', 'pleat_release_length', 'fabric_thickness', 'hem_turnup', 'waistband_height'):
+            box.prop(s, prop)
+        box.prop(s, 'create_lining')
+        if s.create_lining:
+            box.prop(s, 'lining_length')
+        box.prop(s, 'zipper_length')
+        box.prop(s, 'zipper_position')
+        box = layout.box()
+        box.label(text='PBR生地')
+        box.prop(s, 'use_external_pbr')
+        if s.use_external_pbr:
+            box.prop(s, 'texture_directory')
+            box.prop(s, 'normal_format')
+            box.prop(s, 'pack_external_textures')
+            box.operator('rug.scan_pbr')
+        box.prop(s, 'texture_tile_cm')
+        box.prop(s, 'weave_size_cm')
         row = box.row(align=True)
-        row.prop(settings, 'waist_width')
-        row.prop(settings, 'waist_depth')
-        row = box.row(align=True)
-        row.prop(settings, 'hem_width')
-        row.prop(settings, 'hem_depth')
-        box.prop(settings, 'back_drop')
-        box.prop(settings, 'wrinkle_strength')
-
-        box = layout.box()
-        box.label(text='プリーツ・縫製', icon='MOD_CLOTH')
-        box.prop(settings, 'pleat_depth')
-        box.prop(settings, 'pleat_stitch_length')
-        box.prop(settings, 'fabric_thickness')
-        box.prop(settings, 'waistband_height')
-        box.prop(settings, 'waistband_overlap')
-        box.prop(settings, 'vertical_segments')
-        box.prop(settings, 'create_stitches')
-        box.prop(settings, 'create_lining')
-        if settings.create_lining:
-            box.prop(settings, 'lining_length_ratio')
-        box.prop(settings, 'create_hardware')
-
-        box = layout.box()
-        box.label(text='生地・PBR', icon='MATERIAL')
-        box.prop(settings, 'fabric')
-        box.prop(settings, 'weave_scale')
-        box.prop(settings, 'weave_strength')
-        box.prop(settings, 'texture_resolution')
-        box.label(text='生成時にBase/Roughness/Normalを作成', icon='INFO')
-
+        row.prop(s, 'normal_strength')
+        row.prop(s, 'height_strength')
+        box.prop(s, 'ao_strength')
+        layout.operator('rug.generate_skirt', icon='MOD_CLOTH')
         row = layout.row(align=True)
-        row.scale_y = 1.4
-        row.operator('rug.generate_skirt', icon='OUTLINER_OB_MESH')
-        row.operator('rug.delete_skirt', text='', icon='TRASH')
-
+        row.operator('rug.prepare_preview', icon='CAMERA_DATA')
+        row.operator('rug.clear_preview')
+        layout.operator('rug.render_front', icon='RENDER_STILL')
         box = layout.box()
-        box.label(text='質感確認', icon='RENDER_STILL')
-        row = box.row(align=True)
-        row.operator('rug.prepare_preview', icon='LIGHT_AREA')
-        row.operator('rug.clear_preview', text='', icon='X')
-        box.operator('rug.render_preview', icon='IMAGE_DATA')
-
-        box = layout.box()
-        box.label(text='保存・書き出し', icon='EXPORT')
+        box.label(text='出力')
+        box.prop(s, 'output_directory')
+        box.prop(s, 'export_format')
+        box.prop(s, 'apply_modifiers')
+        box.operator('rug.export_skirt', icon='EXPORT')
         box.operator('rug.save_blend_copy', icon='FILE_BLEND')
-        box.separator()
-        box.prop(settings, 'export_format')
-        box.prop(settings, 'apply_modifiers')
-        box.prop(settings, 'export_lining')
-        box.prop(settings, 'export_hardware')
-        box.operator('rug.export_skirt', icon='FILE_TICK')
+        layout.operator('rug.delete_skirt', icon='TRASH')
 
 
 CLASSES = (RUG_PT_main,)
