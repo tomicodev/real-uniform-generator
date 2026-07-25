@@ -1,4 +1,4 @@
-name: Validate Package and Test Blender Add-on
+name: Validate Package and Test Blender Add-on v0.5.0
 
 on:
   push:
@@ -8,23 +8,47 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: real-uniform-generator-${{ github.ref }}
+  group: real-uniform-generator-v05-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   validate-and-package:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Validate every Python module
-        run: python -m compileall -q real_uniform_generator tests
+      - name: Compile loader and embedded runtime modules
+        run: |
+          python -m py_compile real_uniform_generator/__init__.py tests/*.py
+          python - <<'PY'
+          import base64
+          import io
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          path = Path('real_uniform_generator/v05_runtime_payload.b64')
+          payload = base64.b64decode(path.read_text(encoding='ascii'), validate=True)
+          required = {
+              'constants.py', 'pattern.py', 'properties.py', 'material_io.py',
+              'textures.py', 'materials.py', 'geometry.py', 'finishing.py',
+              'exporter.py', 'preview.py', 'operators.py', 'ui.py',
+          }
+          with ZipFile(io.BytesIO(payload)) as archive:
+              names = set(archive.namelist())
+              missing = required - names
+              if missing:
+                  raise SystemExit(f'Runtime payload is missing: {sorted(missing)}')
+              for name in sorted(required):
+                  compile(archive.read(name).decode('utf-8'), name, 'exec')
+          print('Embedded runtime modules compile successfully')
+          PY
+
+      - name: Test continuous pleat pattern mathematics
+        run: python tests/test_pattern_math.py
 
       - name: Validate package structure and manifest
         run: |
@@ -34,18 +58,7 @@ jobs:
 
           package = Path('real_uniform_generator')
           required = {
-              '__init__.py',
-              'constants.py',
-              'properties.py',
-              'geometry.py',
-              'finishing.py',
-              'materials.py',
-              'textures.py',
-              'exporter.py',
-              'preview.py',
-              'operators.py',
-              'ui.py',
-              'LICENSE.txt',
+              '__init__.py', 'v05_runtime_payload.b64', 'LICENSE.txt',
               'blender_manifest.toml',
           }
           present = {path.name for path in package.iterdir() if path.is_file()}
@@ -54,19 +67,11 @@ jobs:
               raise SystemExit(f'Missing package files: {sorted(missing)}')
 
           with (package / 'blender_manifest.toml').open('rb') as file:
-              data = tomllib.load(file)
-          manifest_required = {
-              'schema_version', 'id', 'version', 'name', 'tagline',
-              'maintainer', 'type', 'blender_version_min', 'license'
-          }
-          missing = manifest_required - data.keys()
-          if missing:
-              raise SystemExit(f'Missing manifest keys: {sorted(missing)}')
-          if data['id'] != 'real_uniform_generator':
-              raise SystemExit('Unexpected extension id')
-          if data['version'] != '0.2.0':
-              raise SystemExit(f"Unexpected extension version: {data['version']}")
-          print('Package and manifest OK:', data['id'], data['version'])
+              manifest = tomllib.load(file)
+          assert manifest['id'] == 'real_uniform_generator'
+          assert manifest['version'] == '0.5.0', manifest
+          assert manifest['blender_version_min'] == '4.3.0'
+          print('Package and manifest OK')
           PY
 
       - name: Create portable fallback ZIP
@@ -76,33 +81,26 @@ jobs:
           from zipfile import ZIP_DEFLATED, ZipFile
 
           source = Path('real_uniform_generator')
-          output = Path('dist/real_uniform_generator-v0.2.0.zip')
+          output = Path('dist/real_uniform_generator-v0.5.0-fallback.zip')
           output.parent.mkdir(parents=True, exist_ok=True)
-          excluded_suffixes = {'.pyc', '.pyo', '.zip'}
-
           with ZipFile(output, 'w', ZIP_DEFLATED) as archive:
               for path in sorted(source.rglob('*')):
-                  if not path.is_file():
+                  if not path.is_file() or '__pycache__' in path.parts or path.suffix in {'.pyc', '.pyo'}:
                       continue
-                  relative = path.relative_to(source)
-                  if '__pycache__' in relative.parts or path.suffix in excluded_suffixes:
-                      continue
-                  archive.write(path, relative.as_posix())
-
+                  archive.write(path, path.relative_to(source).as_posix())
           with ZipFile(output) as archive:
-              names = set(archive.namelist())
-              required_root = {'__init__.py', 'blender_manifest.toml', 'LICENSE.txt'}
-              missing = required_root - names
+              root = set(archive.namelist())
+              required = {'__init__.py', 'blender_manifest.toml', 'LICENSE.txt', 'v05_runtime_payload.b64'}
+              missing = required - root
               if missing:
-                  raise SystemExit(f'Archive root is invalid: missing {sorted(missing)}')
-          print('Created:', output)
+                  raise SystemExit(f'Archive root is invalid: {sorted(missing)}')
+          print(output)
           PY
 
-      - name: Upload fallback add-on ZIP
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: real_uniform_generator-v0.2.0-fallback
-          path: dist/real_uniform_generator-v0.2.0.zip
+          name: real_uniform_generator-v0.5.0-fallback
+          path: dist/real_uniform_generator-v0.5.0-fallback.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -115,8 +113,7 @@ jobs:
       BLENDER_USER_RESOURCES: ${{ github.workspace }}/.blender-user
       RUG_TEST_OUTPUT_DIR: ${{ github.workspace }}/runtime-output
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Install Linux runtime libraries
         run: |
@@ -134,35 +131,32 @@ jobs:
           chmod +x blender-runtime/blender
           blender-runtime/blender --version
 
-      - name: Build and validate with Blender extension CLI
+      - name: Build and validate official extension ZIP
         run: |
           mkdir -p blender-dist
           blender-runtime/blender --command extension build \
             --source-dir real_uniform_generator \
-            --output-filepath blender-dist/real_uniform_generator-v0.2.0.zip
+            --output-filepath blender-dist/real_uniform_generator-v0.5.0.zip
           blender-runtime/blender --command extension validate \
-            blender-dist/real_uniform_generator-v0.2.0.zip
+            blender-dist/real_uniform_generator-v0.5.0.zip
 
-      - name: Run source-tree Blender smoke test
+      - name: Run source-tree Blender test
         run: |
           mkdir -p "$RUG_TEST_OUTPUT_DIR"
           xvfb-run -a blender-runtime/blender \
             --background --factory-startup --python-exit-code 1 \
             --python tests/blender_smoke_test.py
 
-      - name: Install packaged extension in isolated Blender profile
+      - name: Install packaged extension in isolated profile
         run: |
           rm -rf "$BLENDER_USER_RESOURCES" .blender-extension-repo
           mkdir -p "$BLENDER_USER_RESOURCES" .blender-extension-repo
           blender-runtime/blender --command extension repo-add \
             --name "RUG Test" \
             --directory "$GITHUB_WORKSPACE/.blender-extension-repo" \
-            --source USER \
-            --clear-all \
-            rug_test
+            --source USER --clear-all rug_test
           blender-runtime/blender --command extension install-file \
-            -r rug_test -e \
-            blender-dist/real_uniform_generator-v0.2.0.zip
+            -r rug_test -e blender-dist/real_uniform_generator-v0.5.0.zip
 
       - name: Run installed-extension Blender test
         run: |
@@ -170,20 +164,18 @@ jobs:
             --background --python-exit-code 1 \
             --python tests/installed_extension_smoke_test.py
 
-      - name: Upload officially built extension ZIP
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: real_uniform_generator-v0.2.0
-          path: blender-dist/real_uniform_generator-v0.2.0.zip
+          name: real_uniform_generator-v0.5.0
+          path: blender-dist/real_uniform_generator-v0.5.0.zip
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Upload Blender runtime outputs
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: blender-runtime-outputs
+          name: blender-runtime-outputs-v0.5.0
           path: runtime-output
           if-no-files-found: warn
           retention-days: 14
