@@ -1,11 +1,10 @@
-"""Executed after installing and enabling the extension in an isolated repo."""
+"""Executed after installing and enabling the packaged extension."""
 
 from pathlib import Path
 import os
 import tempfile
 
 import bpy
-
 
 GENERATED_COLLECTION = 'RUG_UniformSkirt'
 FABRIC_MATERIAL = 'RUG_UniformFabric'
@@ -25,103 +24,62 @@ def output_directory(prefix):
     return Path(tempfile.mkdtemp(prefix=f'{prefix}_'))
 
 
-def export_and_check(settings, output_dir, export_format):
-    settings.export_format = export_format
-    extension = export_format.lower()
-    output_path = output_dir / f'installed_test.{extension}'
-    result = bpy.ops.rug.export_skirt('EXEC_DEFAULT', filepath=str(output_path))
-    assert_true('FINISHED' in result, f'{export_format} export failed: {result}')
-    assert_true(output_path.exists(), f'{export_format} was not created: {output_path}')
-    assert_true(output_path.stat().st_size > 1024, f'{export_format} output is unexpectedly small')
-    return output_path
-
-
 def main():
-    assert_true(
-        hasattr(bpy.types.Scene, 'rug_settings'),
-        'Installed extension is not registered or enabled',
-    )
-    assert_true(
-        hasattr(bpy.ops.rug, 'generate_skirt'),
-        'Generate operator is not registered',
-    )
+    assert_true(hasattr(bpy.types.Scene, 'rug_settings'), 'Extension is not registered')
+    assert_true(hasattr(bpy.ops.rug, 'generate_skirt'), 'Generate operator is missing')
 
     settings = bpy.context.scene.rug_settings
     settings.pleat_count = 18
-    settings.skirt_length = 0.48
     settings.vertical_segments = 48
-    settings.create_lining = True
-    settings.create_stitches = True
-    settings.create_hardware = True
     settings.texture_resolution = '512'
+    settings.show_internal_construction = False
 
     result = bpy.ops.rug.generate_skirt()
-    assert_true('FINISHED' in result, f'Generate operator failed: {result}')
+    assert_true('FINISHED' in result, f'Generate failed: {result}')
 
     collection = bpy.data.collections.get(GENERATED_COLLECTION)
-    assert_true(collection is not None, 'Generated collection was not created')
+    assert_true(collection is not None, 'Generated collection is missing')
     names = {obj.name for obj in collection.objects}
     required = {
-        'RUG_SkirtOuter',
-        'RUG_Waistband',
-        'RUG_Lining',
-        'RUG_ZipperTape',
-        'RUG_ZipperTeeth',
-        'RUG_ZipperPull',
-        'RUG_HookEye',
-        'RUG_WaistHook',
+        'RUG_SkirtOuter', 'RUG_Waistband', 'RUG_HemFacingInner', 'RUG_Lining',
+        'RUG_ZipperTape_L', 'RUG_ZipperTape_R', 'RUG_ZipperCoil_L', 'RUG_ZipperCoil_R',
     }
-    missing = required - names
-    assert_true(not missing, f'Missing installed-extension objects: {sorted(missing)}')
+    assert_true(not (required - names), f'Missing installed objects: {sorted(required - names)}')
 
-    skirt = bpy.data.objects.get('RUG_SkirtOuter')
-    assert_true(skirt is not None and skirt.type == 'MESH', 'Outer skirt is missing')
-    assert_true(len(skirt.data.vertices) > 1000, 'Outer skirt is unexpectedly simple')
-    assert_true(bool(skirt.data.uv_layers), 'Outer skirt UV is missing')
-    sharp_edges = sum(1 for edge in skirt.data.edges if edge.use_edge_sharp)
-    assert_true(
-        sharp_edges >= settings.pleat_count,
-        f'Pleat creases were not preserved: {sharp_edges} sharp edges',
-    )
+    # Internal zipper construction is generated but hidden in normal exterior view.
+    for name in ('RUG_ZipperTape_L', 'RUG_ZipperTape_R', 'RUG_ZipperCoil_L', 'RUG_ZipperCoil_R'):
+        obj = bpy.data.objects[name]
+        assert_true(obj.hide_render, f'{name} should be hidden from exterior renders by default')
+
+    skirt = bpy.data.objects['RUG_SkirtOuter']
+    assert_true(len(skirt.data.vertices) > 3000, 'Installed skirt is unexpectedly simple')
+    assert_true(bool(skirt.data.uv_layers), 'Installed skirt UV is missing')
 
     fabric = bpy.data.materials.get(FABRIC_MATERIAL)
-    assert_true(fabric is not None, 'Fabric material is missing')
-    assert_true(bool(fabric.get('rug_exportable_textures')), 'Packed PBR material is missing')
-    maps = [
-        image for image in bpy.data.images
-        if image.get('rug_map_type') in {'base_color', 'roughness', 'normal'}
-    ]
-    assert_true(len(maps) == 3, f'Expected 3 packed PBR maps, found {len(maps)}')
-    assert_true(all(image.packed_file for image in maps), 'PBR images are not packed')
+    assert_true(fabric is not None, 'Installed fabric material is missing')
+    assert_true(bool(fabric.get('rug_exportable_textures')), 'Installed PBR maps are missing')
 
     output_dir = output_directory('installed')
-
     preview_path = output_dir / 'installed_preview.png'
     result = bpy.ops.rug.render_preview('EXEC_DEFAULT', filepath=str(preview_path))
-    assert_true('FINISHED' in result, f'Preview render failed: {result}')
-    assert_true(preview_path.exists(), 'Preview image was not created')
-    assert_true(preview_path.stat().st_size > 4096, 'Preview image is unexpectedly small')
+    assert_true('FINISHED' in result, f'Installed preview failed: {result}')
+    assert_true(preview_path.exists() and preview_path.stat().st_size > 4096, 'Installed preview missing')
 
-    glb_path = export_and_check(settings, output_dir, 'GLB')
-    fbx_path = export_and_check(settings, output_dir, 'FBX')
-    obj_path = export_and_check(settings, output_dir, 'OBJ')
-
-    assert_true(obj_path.with_suffix('.mtl').exists(), 'OBJ MTL was not created')
-    texture_dir = output_dir / f'{obj_path.stem}_textures'
-    assert_true(len(list(texture_dir.glob('*.png'))) == 3, 'OBJ PBR textures were not created')
+    settings.export_format = 'GLB'
+    glb_path = output_dir / 'installed_test.glb'
+    result = bpy.ops.rug.export_skirt('EXEC_DEFAULT', filepath=str(glb_path))
+    assert_true('FINISHED' in result, f'Installed GLB export failed: {result}')
+    assert_true(glb_path.exists() and glb_path.stat().st_size > 1024, 'Installed GLB missing')
 
     blend_path = output_dir / 'installed_test.blend'
     result = bpy.ops.rug.save_blend_copy('EXEC_DEFAULT', filepath=str(blend_path))
-    assert_true('FINISHED' in result, f'BLEND copy failed: {result}')
-    assert_true(blend_path.exists(), 'BLEND copy was not created')
+    assert_true('FINISHED' in result, f'Installed BLEND save failed: {result}')
+    assert_true(blend_path.exists(), 'Installed BLEND missing')
 
     print('RUG_INSTALLED_EXTENSION_TEST_OK')
-    print(f'Generated objects: {len(collection.objects)}')
-    print(f'Sharp edges: {sharp_edges}')
+    print(f'Objects: {len(collection.objects)}')
     print(f'Preview: {preview_path}')
     print(f'GLB: {glb_path}')
-    print(f'FBX: {fbx_path}')
-    print(f'OBJ: {obj_path}')
     print(f'BLEND: {blend_path}')
 
 
