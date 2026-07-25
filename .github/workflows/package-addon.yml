@@ -31,19 +31,24 @@ jobs:
           from zipfile import ZipFile
 
           path = Path('real_uniform_generator/v05_runtime_payload.b64')
-          payload = base64.b64decode(path.read_text(encoding='ascii'), validate=True)
+          encoded = ''.join(path.read_text(encoding='utf-8-sig').split())
+          encoded += '=' * (-len(encoded) % 4)
+          payload = base64.b64decode(encoded, validate=True)
           required = {
               'constants.py', 'pattern.py', 'properties.py', 'material_io.py',
               'textures.py', 'materials.py', 'geometry.py', 'finishing.py',
               'exporter.py', 'preview.py', 'operators.py', 'ui.py',
           }
           with ZipFile(io.BytesIO(payload)) as archive:
+              bad_member = archive.testzip()
+              if bad_member is not None:
+                  raise SystemExit(f'Runtime ZIP member is corrupt: {bad_member}')
               names = set(archive.namelist())
               missing = required - names
               if missing:
                   raise SystemExit(f'Runtime payload is missing: {sorted(missing)}')
               for name in sorted(required):
-                  compile(archive.read(name).decode('utf-8'), name, 'exec')
+                  compile(archive.read(name).decode('utf-8-sig'), name, 'exec')
           print('Embedded runtime modules compile successfully')
           PY
 
