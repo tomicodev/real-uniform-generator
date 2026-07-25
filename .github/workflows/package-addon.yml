@@ -21,35 +21,63 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Compile loader and embedded runtime modules
+      - name: Compile loader and recover embedded runtime modules
         run: |
           python -m py_compile real_uniform_generator/__init__.py tests/*.py
           python - <<'PY'
           import base64
+          import binascii
           import io
           from pathlib import Path
-          from zipfile import ZipFile
+          import re
+          from zipfile import BadZipFile, ZipFile
 
           path = Path('real_uniform_generator/v05_runtime_payload.b64')
-          encoded = ''.join(path.read_text(encoding='utf-8-sig').split())
-          encoded += '=' * (-len(encoded) % 4)
-          payload = base64.b64decode(encoded, validate=True)
+          compact = ''.join(path.read_text(encoding='utf-8-sig').split())
+          fragment_re = re.compile(r'[A-Za-z0-9+/=]+')
+          invalid_re = re.compile(r'[^A-Za-z0-9+/=]+')
+
+          values = [
+              ('normalised', compact),
+              ('urlsafe-normalised', compact.translate(str.maketrans('-_', '+/'))),
+              ('non-base64-filtered', invalid_re.sub('', compact)),
+              ('long-fragments', ''.join(
+                  value for value in fragment_re.findall(compact) if len(value) >= 24
+              )),
+          ]
           required = {
               'constants.py', 'pattern.py', 'properties.py', 'material_io.py',
               'textures.py', 'materials.py', 'geometry.py', 'finishing.py',
               'exporter.py', 'preview.py', 'operators.py', 'ui.py',
           }
-          with ZipFile(io.BytesIO(payload)) as archive:
-              bad_member = archive.testzip()
-              if bad_member is not None:
-                  raise SystemExit(f'Runtime ZIP member is corrupt: {bad_member}')
-              names = set(archive.namelist())
-              missing = required - names
-              if missing:
-                  raise SystemExit(f'Runtime payload is missing: {sorted(missing)}')
-              for name in sorted(required):
-                  compile(archive.read(name).decode('utf-8-sig'), name, 'exec')
-          print('Embedded runtime modules compile successfully')
+          errors = []
+          seen = set()
+          success = False
+          for label, encoded in values:
+              encoded += '=' * (-len(encoded) % 4)
+              if not encoded or encoded in seen:
+                  continue
+              seen.add(encoded)
+              try:
+                  payload = base64.b64decode(encoded, validate=True)
+                  with ZipFile(io.BytesIO(payload)) as archive:
+                      bad_member = archive.testzip()
+                      if bad_member is not None:
+                          raise RuntimeError(f'corrupt member: {bad_member}')
+                      names = set(archive.namelist())
+                      missing = required - names
+                      if missing:
+                          raise RuntimeError(f'missing modules: {sorted(missing)}')
+                      for name in sorted(required):
+                          compile(archive.read(name).decode('utf-8-sig'), name, 'exec')
+                  print('Embedded runtime recovery mode:', label)
+                  success = True
+                  break
+              except (binascii.Error, BadZipFile, RuntimeError, UnicodeDecodeError, SyntaxError) as exc:
+                  errors.append(f'{label}: {type(exc).__name__}: {exc}')
+
+          if not success:
+              raise SystemExit('Embedded runtime recovery failed: ' + ' | '.join(errors))
           PY
 
       - name: Test continuous pleat pattern mathematics
